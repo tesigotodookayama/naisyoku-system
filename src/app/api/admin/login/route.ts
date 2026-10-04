@@ -79,7 +79,16 @@ export async function GET(request: NextRequest) {
       headers: { Location: "/admin/login" },
     });
   }
-  const stored = await readAdminAuth();
+  let stored: Awaited<ReturnType<typeof readAdminAuth>> = null;
+  try {
+    stored = await readAdminAuth();
+  } catch (error) {
+    console.error(error);
+    return new NextResponse(null, {
+      status: 303,
+      headers: { Location: "/admin/login?error=1" },
+    });
+  }
   if (stored?.passwordHash) {
     return new NextResponse(null, {
       status: 303,
@@ -96,7 +105,22 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const { id, password, redirectTo, wantsJson } = await readCredentials(request);
-  const stored = await readAdminAuth();
+  let stored: Awaited<ReturnType<typeof readAdminAuth>> = null;
+  try {
+    stored = await readAdminAuth();
+  } catch (error) {
+    console.error(error);
+    const message = "データを読み込めませんでした。しばらくしてからもう一度お試しください。";
+    if (wantsJson) {
+      return NextResponse.json({ ok: false, message }, { status: 503 });
+    }
+    const failQs = new URLSearchParams({ error: "1" });
+    if (redirectTo !== "/") failQs.set("redirect", redirectTo);
+    return new NextResponse(null, {
+      status: 303,
+      headers: { Location: `/admin/login?${failQs.toString()}` },
+    });
+  }
   const passwordOk =
     id === ADMIN_ID &&
     (await passwordMatchesStoredOrEnv(password, stored?.passwordHash, ADMIN_PASSWORD)) !==

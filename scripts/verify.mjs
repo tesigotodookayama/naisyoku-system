@@ -307,5 +307,52 @@ assert(merged.adminAuth?.passwordHash === "real-hash", "保存時は既存のハ
 const untouched = mergeStoredFile(seeded, null);
 assert(!("adminAuth" in untouched), "未設定のときはハッシュを書かない");
 
+console.log("\n7. 保存先の選択");
+const { databaseUrl, storageKind, isPersistentStore, postgresDriver } = await import(
+  "../src/lib/storageMode.ts"
+);
+
+assert(databaseUrl({}) == null, "環境変数が無ければデータベースURLは無い");
+assert(databaseUrl({ DATABASE_URL: "  " }) == null, "空白の DATABASE_URL は無視");
+assert(
+  databaseUrl({ POSTGRES_URL: " postgres://local/db " }) === "postgres://local/db",
+  "POSTGRES_URL の前後の空白を除く"
+);
+assert(
+  databaseUrl({
+    DATABASE_URL: "postgres://primary/db",
+    POSTGRES_URL: "postgres://secondary/db",
+  }) === "postgres://primary/db",
+  "DATABASE_URL を POSTGRES_URL より先に使う"
+);
+assert(
+  databaseUrl({ DATABASE_URL: "", POSTGRES_URL: "postgres://fallback/db" }) ===
+    "postgres://fallback/db",
+  "空の DATABASE_URL は POSTGRES_URL に戻る"
+);
+assert(storageKind({}) === "file", "URL が無ければファイル保存");
+assert(
+  storageKind({ DATABASE_URL: "postgres://db/app" }) === "postgres",
+  "DATABASE_URL があれば Postgres"
+);
+assert(
+  storageKind({ POSTGRES_URL: "postgres://db/app" }) === "postgres",
+  "POSTGRES_URL だけでも Postgres"
+);
+assert(isPersistentStore({}) === true, "ローカルのファイル保存は残る");
+assert(isPersistentStore({ VERCEL: "1" }) === false, "Vercel のファイル保存は消える");
+assert(
+  isPersistentStore({ VERCEL: "1", DATABASE_URL: "postgres://db/app" }) === true,
+  "Vercel でも Postgres なら残る"
+);
+assert(
+  postgresDriver("postgresql://u:p@ep-abc.us-east-2.aws.neon.tech/neondb") === "neon-http",
+  "Neon のホストは HTTP ドライバ"
+);
+assert(
+  postgresDriver("postgres://naisyoku:naisyoku@127.0.0.1:5432/naisyoku") === "pg",
+  "手元の Postgres は通常の接続"
+);
+
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

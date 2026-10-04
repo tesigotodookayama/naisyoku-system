@@ -19,3 +19,13 @@ export function mergeStoredFile(data: DbFile, adminAuth: AdminAuthRecord | null)
   const pub = stripAdminAuth(data);
   return adminAuth ? { ...pub, adminAuth } : pub;
 }
+
+export function parseAdminAuth(value: unknown): AdminAuthRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Partial<AdminAuthRecord>;
+  if (typeof record.passwordHash !== "string" || !record.passwordHash) return null;
+  return {
+    passwordHash: record.passwordHash,
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : "",
+  };
+}

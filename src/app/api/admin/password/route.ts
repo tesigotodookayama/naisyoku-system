@@ -3,7 +3,7 @@
  * POST /api/admin/password
  *
  * Requires the existing admin_session cookie. The current session is kept.
- * The new password is stored as a scrypt hash inside the app data file.
+ * The new password is stored as a scrypt hash next to the app data.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -13,10 +13,21 @@ import {
   MIN_ADMIN_PASSWORD_LENGTH,
   validatePasswordChange,
 } from "@/lib/adminPasswordPolicy";
-import { dataStoreIsPersistent, readAdminAuth, writeAdminAuth } from "@/lib/db";
+import { dataStoreIsPersistent, readAdminAuth, storageKind, writeAdminAuth } from "@/lib/db";
+import type { StorageKind } from "@/lib/storageMode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function passwordSavedMessage(storage: StorageKind): string {
+  if (storage === "postgres") {
+    return "パスワードを変更しました。データベースに保存しました。このまま作業を続けられます。";
+  }
+  if (dataStoreIsPersistent()) {
+    return "パスワードを変更しました。このまま作業を続けられます。";
+  }
+  return "パスワードを変更しました。この環境では保存が消えることがあり、そのときは元のパスワードで入れます。";
+}
 
 function isAdmin(request: NextRequest): boolean {
   return request.cookies.get("admin_session")?.value === "authenticated";
@@ -37,6 +48,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       loginId: ADMIN_ID,
       passwordChanged: Boolean(auth?.passwordHash),
+      storage: storageKind(process.env),
       persistent: dataStoreIsPersistent(),
       minLength: MIN_ADMIN_PASSWORD_LENGTH,
     },
@@ -96,14 +108,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const storage = storageKind(process.env);
   const persistent = dataStoreIsPersistent();
   return NextResponse.json(
     {
       ok: true,
+      storage,
       persistent,
-      message: persistent
-        ? "パスワードを変更しました。このまま作業を続けられます。"
-        : "パスワードを変更しました。この環境では保存が消えることがあり、そのときは元のパスワードで入れます。",
+      message: passwordSavedMessage(storage),
     },
     { headers: { "Cache-Control": "no-store" } }
   );

@@ -12,6 +12,7 @@ import {
 type PasswordStatus = {
   loginId: string;
   passwordChanged: boolean;
+  storage?: "postgres" | "file";
   persistent: boolean;
   minLength: number;
 };
@@ -65,6 +66,7 @@ export default function AccountPage() {
         ok?: boolean;
         message?: string;
         persistent?: boolean;
+        storage?: "postgres" | "file";
       } | null;
       if (!res.ok || !json?.ok) {
         setError(json?.message || "パスワードを変更できませんでした。もう一度お試しください。");
@@ -75,7 +77,12 @@ export default function AccountPage() {
       setConfirmPassword("");
       setStatus((prev) =>
         prev
-          ? { ...prev, passwordChanged: true, persistent: json.persistent ?? prev.persistent }
+          ? {
+              ...prev,
+              passwordChanged: true,
+              persistent: json.persistent ?? prev.persistent,
+              storage: json.storage ?? prev.storage,
+            }
           : prev
       );
       toast(json.message || "パスワードを変更しました。このまま作業を続けられます。", "success");
@@ -96,16 +103,19 @@ export default function AccountPage() {
           description="管理者としてログインするときのパスワードを変えます。ログインIDはそのままです。変えたあとも、ログアウトせずにこの画面のまま使えます。"
         />
 
-        {status && !status.persistent && (
-          <Banner tone="warn">
-            いまの公開先（Vercel）では、変更したパスワードがサーバーの入れ替わりで消えることがあります。消えてもログインできなくなることはありません。そのときは、設定している管理者パスワード（未設定なら見本のパスワード）で入れます。ずっと同じパスワードを使うには、データベース（Vercel
-            の Postgres や KV など）への保存が必要です。
+        {status?.storage === "postgres" && (
+          <Banner tone="info">
+            パスワードは暗号化してデータベースに保存します。変更すると、見本のパスワードでは入れなくなります。
           </Banner>
         )}
-
-        {status?.persistent && (
+        {status && status.storage !== "postgres" && status.persistent && (
           <Banner tone="info">
-            パスワードは暗号化してこのパソコンのデータに保存します。変更すると、見本のパスワードでは入れなくなります。
+            パスワードは暗号化してこのパソコンのファイルに保存します。変更すると、見本のパスワードでは入れなくなります。
+          </Banner>
+        )}
+        {status && status.storage !== "postgres" && !status.persistent && (
+          <Banner tone="warn">
+            ここでは変更したパスワードが消えることがあります。消えてもログインできなくなることはありません。見本のパスワード、または環境変数のパスワードで入れます。
           </Banner>
         )}
 
