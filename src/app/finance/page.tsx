@@ -40,6 +40,11 @@ export default function FinancePage() {
     urlTab === "billing" || urlTab === "invoices" || urlTab === "payment" || urlTab === "individual"
       ? urlTab
       : "billing";
+  const setTab = (next: Tab) => {
+    const qs = new URLSearchParams(searchParams.toString());
+    qs.set("tab", next);
+    router.replace(`${pathname}?${qs.toString()}`, { scroll: false });
+  };
   const [billClientId, setBillClientId] = useState("");
   const [billMonth, setBillMonth] = useState("");
   const [payMonth, setPayMonth] = useState("");
