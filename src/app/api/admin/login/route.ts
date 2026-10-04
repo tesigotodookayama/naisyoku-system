@@ -10,9 +10,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_ID, ADMIN_PASSWORD } from "@/lib/adminCredentials";
+import { passwordMatchesStoredOrEnv } from "@/lib/adminPasswordHash";
+import { readAdminAuth } from "@/lib/db";
 
-const ADMIN_ID = process.env.ADMIN_ID ?? "tesigotodo";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "teshigoto@2026";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function safePath(raw: string | null | undefined): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
@@ -76,6 +79,13 @@ export async function GET(request: NextRequest) {
       headers: { Location: "/admin/login" },
     });
   }
+  const stored = await readAdminAuth();
+  if (stored?.passwordHash) {
+    return new NextResponse(null, {
+      status: 303,
+      headers: { Location: "/admin/login?error=changed" },
+    });
+  }
   return withSession(
     new NextResponse(null, {
       status: 303,
@@ -86,7 +96,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const { id, password, redirectTo, wantsJson } = await readCredentials(request);
-  const ok = id === ADMIN_ID && password === ADMIN_PASSWORD;
+  const stored = await readAdminAuth();
+  const passwordOk =
+    id === ADMIN_ID &&
+    (await passwordMatchesStoredOrEnv(password, stored?.passwordHash, ADMIN_PASSWORD)) !==
+      "reject";
+  const ok = passwordOk;
 
   if (ok) {
     if (wantsJson) {

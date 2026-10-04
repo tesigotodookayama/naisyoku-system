@@ -25,6 +25,10 @@ const navGroups = [
       { href: "/staff", label: "内職者管理", icon: "👥" },
     ],
   },
+  {
+    title: "アカウント",
+    items: [{ href: "/account", label: "パスワード変更", icon: "🔑" }],
+  },
 ];
 
 export default function Sidebar({

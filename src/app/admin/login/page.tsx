@@ -1,3 +1,8 @@
+import { readAdminAuth } from "@/lib/db";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const DEMO_ID = "tesigotodo";
 const DEMO_PASSWORD = "teshigoto@2026";
 
@@ -14,7 +19,19 @@ export default async function AdminLoginPage({
 }) {
   const sp = await searchParams;
   const redirectTo = safeRedirect(sp.redirect);
-  const hasError = sp.error === "1";
+  const hasError = sp.error === "1" || sp.error === "changed";
+  let passwordChanged = sp.error === "changed";
+  if (!passwordChanged) {
+    try {
+      passwordChanged = Boolean((await readAdminAuth())?.passwordHash);
+    } catch {
+      passwordChanged = false;
+    }
+  }
+  const errorMessage =
+    sp.error === "changed"
+      ? "パスワードを変更済みのため、見本アカウントでは入れません。変更したパスワードを入力してください。"
+      : "IDまたはパスワードが正しくありません。";
 
   return (
     <div
@@ -42,7 +59,7 @@ export default async function AdminLoginPage({
 
           {hasError && (
             <div className="mb-6 bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm font-black">
-              IDまたはパスワードが正しくありません。
+              {errorMessage}
             </div>
           )}
 
@@ -83,19 +100,28 @@ export default async function AdminLoginPage({
             </button>
           </form>
 
-          <div className="mt-8 p-4 rounded-2xl bg-amber-50 border-2 border-amber-200">
-            <p className="font-black text-amber-900 mb-1">見本ログイン</p>
-            <p className="text-sm text-slate-700 mb-3">
-              ID <span className="font-mono font-bold">{DEMO_ID}</span> / パスワード{" "}
-              <span className="font-mono font-bold">{DEMO_PASSWORD}</span>
-            </p>
-            <a
-              href={`/api/admin/login?demo=1&redirect=${encodeURIComponent(redirectTo)}`}
-              className="btn btn-outline w-full min-h-12"
-            >
-              見本アカウントで入る
-            </a>
-          </div>
+          {passwordChanged ? (
+            <div className="mt-8 p-4 rounded-2xl bg-slate-50 border-2 border-slate-200">
+              <p className="font-black text-slate-800 mb-1">見本ログインは使えません</p>
+              <p className="text-sm text-slate-600">
+                パスワードを変更したあとは、見本のパスワードでは入れません。上の欄に、変更したパスワードを入力してください。
+              </p>
+            </div>
+          ) : (
+            <div className="mt-8 p-4 rounded-2xl bg-amber-50 border-2 border-amber-200">
+              <p className="font-black text-amber-900 mb-1">見本ログイン</p>
+              <p className="text-sm text-slate-700 mb-3">
+                ID <span className="font-mono font-bold">{DEMO_ID}</span> / パスワード{" "}
+                <span className="font-mono font-bold">{DEMO_PASSWORD}</span>
+              </p>
+              <a
+                href={`/api/admin/login?demo=1&redirect=${encodeURIComponent(redirectTo)}`}
+                className="btn btn-outline w-full min-h-12"
+              >
+                見本アカウントで入る
+              </a>
+            </div>
+          )}
 
           <div className="mt-8 pt-6 border-t text-center">
             <p className="text-slate-500 text-sm font-bold">

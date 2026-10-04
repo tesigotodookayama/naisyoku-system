@@ -214,5 +214,98 @@ assert(
 assert(validateArriveQty(pendingAsn, 800) == null, "出荷数と同じ入荷は許可");
 assert(validateArriveQty(pendingAsn, 780) == null, "欠品入荷は許可");
 
+console.log("\n6. 管理者パスワード");
+const { validatePasswordChange } = await import("../src/lib/adminPasswordPolicy.ts");
+const { hashPassword, verifyPassword, passwordMatchesStoredOrEnv } = await import(
+  "../src/lib/adminPasswordHash.ts"
+);
+const { stripAdminAuth, mergeStoredFile } = await import("../src/lib/adminAuthRecord.ts");
+
+assert(
+  validatePasswordChange({
+    currentPassword: "",
+    newPassword: "abcdefgh",
+    confirmPassword: "abcdefgh",
+  }) != null,
+  "現在のパスワード未入力を拒否"
+);
+assert(
+  validatePasswordChange({
+    currentPassword: "old-password",
+    newPassword: "short",
+    confirmPassword: "short",
+  }) != null,
+  "8文字未満を拒否"
+);
+assert(
+  validatePasswordChange({
+    currentPassword: "old-password",
+    newPassword: "new-password",
+    confirmPassword: "other-password",
+  }) != null,
+  "確認不一致を拒否"
+);
+assert(
+  validatePasswordChange({
+    currentPassword: "same-password",
+    newPassword: "same-password",
+    confirmPassword: "same-password",
+  }) != null,
+  "現在と同じパスワードを拒否"
+);
+assert(
+  validatePasswordChange({
+    currentPassword: "old-password",
+    newPassword: "new-password",
+    confirmPassword: "new-password",
+  }) == null,
+  "条件を満たす変更は許可"
+);
+
+const hash = await hashPassword("new-password");
+assert(hash.startsWith("scrypt$"), "scrypt 形式で保存");
+assert(!hash.includes("new-password"), "ハッシュに平文を含まない");
+assert(await verifyPassword("new-password", hash), "正しいパスワードはハッシュと一致");
+assert(!(await verifyPassword("old-password", hash)), "違うパスワードはハッシュと不一致");
+assert(
+  (await passwordMatchesStoredOrEnv("env-secret", null, "env-secret")) === "env",
+  "未変更なら環境変数パスワードを許可"
+);
+assert(
+  (await passwordMatchesStoredOrEnv("wrong", null, "env-secret")) === "reject",
+  "未変更で違うパスワードは拒否"
+);
+assert(
+  (await passwordMatchesStoredOrEnv("new-password", hash, "env-secret")) === "stored",
+  "変更後は新しいパスワードを許可"
+);
+assert(
+  (await passwordMatchesStoredOrEnv("env-secret", hash, "env-secret")) === "reject",
+  "変更後は環境変数パスワードを拒否"
+);
+assert(
+  (await passwordMatchesStoredOrEnv("new-password", null, "env-secret")) === "reject",
+  "保存が消えたら変更後パスワードは使えず環境変数に戻る"
+);
+assert(
+  (await passwordMatchesStoredOrEnv("env-secret", "not-a-hash", "env-secret")) === "reject",
+  "壊れたハッシュでは環境変数に戻さない"
+);
+
+const seeded = createSeedData();
+const published = stripAdminAuth({
+  ...seeded,
+  adminAuth: { passwordHash: hash, updatedAt: "2026-10-04T00:00:00.000Z" },
+});
+assert(!("adminAuth" in published), "公開データにパスワードハッシュを含めない");
+assert(published.clients.length === seeded.clients.length, "公開データは業務データを残す");
+const merged = mergeStoredFile(
+  { ...seeded, adminAuth: { passwordHash: "attacker", updatedAt: "x" } },
+  { passwordHash: "real-hash", updatedAt: "t" }
+);
+assert(merged.adminAuth?.passwordHash === "real-hash", "保存時は既存のハッシュを維持する");
+const untouched = mergeStoredFile(seeded, null);
+assert(!("adminAuth" in untouched), "未設定のときはハッシュを書かない");
+
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

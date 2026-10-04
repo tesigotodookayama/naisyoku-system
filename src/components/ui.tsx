@@ -91,16 +91,18 @@ export function Field({
   required,
   hint,
   error,
+  htmlFor,
 }: {
   label: string;
   children: React.ReactNode;
   required?: boolean;
   hint?: string;
   error?: string;
+  htmlFor?: string;
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-sm font-bold text-slate-700">
+      <label htmlFor={htmlFor} className="text-sm font-bold text-slate-700">
         {label}
         {required && <span className="text-red-500 ml-1">必須</span>}
       </label>
