@@ -12,6 +12,11 @@ function formatAsOfDate(issueDate: string): string {
   return `${y}年${Number(m)}月${Number(d)}日`;
 }
 
+/** Rows that fit on one A4 detail sheet, including the header and total. */
+const DETAIL_ROWS_PER_PAGE = 14;
+
+const FEE_NOTE = "振込にかかる手数料は差し引かずお願いいたします";
+
 export default function PrintInvoicePage({
   params,
 }: {
@@ -34,11 +39,19 @@ export default function PrintInvoicePage({
   const { invoice, client, lines, mixedClientError } = detail;
   const store = data.store;
   const invoiceNo = invoice.number || formatDocNo(invoice.id);
-  const pageCount = 1;
+  const detailPages: (typeof lines)[] =
+    lines.length === 0
+      ? [[]]
+      : Array.from({ length: Math.ceil(lines.length / DETAIL_ROWS_PER_PAGE) }, (_, index) =>
+          lines.slice(index * DETAIL_ROWS_PER_PAGE, (index + 1) * DETAIL_ROWS_PER_PAGE)
+        );
   const asOf = formatAsOfDate(invoice.issueDate);
+  const bankLine = `${store.bankName} ${store.bankBranch} ${store.bankAccountType} ${store.bankAccountNumber}${
+    store.bankAccountHolder ? `　${store.bankAccountHolder}` : ""
+  }`;
 
   return (
-    <PrintShell title="請求書" backHref="/finance?tab=invoices" wide>
+    <PrintShell title="請求書" backHref="/finance?tab=invoices" wide bleed>
       {mixedClientError && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 font-bold print:hidden">
           警告: 顧客の混同が検出されました。データを確認してください。
@@ -111,7 +124,7 @@ export default function PrintInvoicePage({
                 {num(invoice.tax)}
               </td>
               <td className="border border-slate-400 px-3 py-3 text-right text-lg">
-                {pageCount}
+                {detailPages.length}
               </td>
               <td className="border border-slate-400 px-3 py-3 text-right text-xl font-bold">
                 {num(invoice.total)}
@@ -120,35 +133,35 @@ export default function PrintInvoicePage({
           </tbody>
         </table>
 
-        <div className="flex justify-between items-end gap-6 mt-16">
-          <div className="text-sm">
-            <p>
-              {store.bankName} {store.bankBranch} {store.bankAccountType}{" "}
-              {store.bankAccountNumber}
-              {store.bankAccountHolder ? `　${store.bankAccountHolder}` : ""}
-            </p>
-          </div>
-          <div className="border border-slate-700">
-            <div className="border-b border-slate-700 text-center text-xs py-1 px-8 bg-slate-50">
-              検印
-            </div>
-            <div className="flex">
-              <div className="w-14 h-14 border-r border-slate-700" />
-              <div className="w-14 h-14 border-r border-slate-700" />
-              <div className="w-14 h-14" />
+        <div className="mt-12">
+          <div className="flex justify-between items-start gap-6">
+            <p className="min-w-0 flex-1 text-[1.75rem] leading-snug font-medium">{bankLine}</p>
+            <div className="shrink-0 border border-slate-700">
+              <div className="border-b border-slate-700 text-center text-xs py-1 px-8 bg-slate-50">
+                検印
+              </div>
+              <div className="flex">
+                <div className="w-14 h-14 border-r border-slate-700" />
+                <div className="w-14 h-14 border-r border-slate-700" />
+                <div className="w-14 h-14" />
+              </div>
             </div>
           </div>
+          <p className="mt-4 text-[1.75rem] leading-snug font-medium">{FEE_NOTE}</p>
         </div>
       </section>
 
-      {/* ========== Page 2: 御請求明細（納品明細） ========== */}
-      <section className="invoice-page text-[12px] text-slate-900">
+      {/* ========== Following pages: 御請求明細（納品明細） ========== */}
+      {detailPages.map((pageLines, pageIndex) => (
+      <section key={pageIndex} className="invoice-page text-[12px] text-slate-900">
         <div className="relative mb-4">
           <h1 className="text-center text-2xl font-bold tracking-[0.35em] pt-1">
             御 請 求 明 細
           </h1>
           <p className="absolute right-0 top-1 text-sm">No. {invoiceNo}</p>
-          <p className="absolute right-0 top-7 text-xs">1/1ページ</p>
+          <p className="absolute right-0 top-7 text-xs">
+            {pageIndex + 1}/{detailPages.length}ページ
+          </p>
         </div>
 
         <div className="flex justify-between gap-8 mb-4">
@@ -197,7 +210,7 @@ export default function PrintInvoicePage({
             </tr>
           </thead>
           <tbody>
-            {lines.map((l) => {
+            {pageLines.map((l) => {
               const delivery = data.deliveries.find((d) => d.id === l.deliveryId);
               return (
                 <tr key={l.deliveryId}>
@@ -229,7 +242,7 @@ export default function PrintInvoicePage({
               );
             })}
             {/* filler rows for print look */}
-            {Array.from({ length: Math.max(0, 8 - lines.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 8 - pageLines.length) }).map((_, i) => (
               <tr key={`empty-${i}`}>
                 {Array.from({ length: 8 }).map((__, j) => (
                   <td key={j} className="border border-slate-400 px-2 py-3">
@@ -259,10 +272,13 @@ export default function PrintInvoicePage({
           </tfoot>
         </table>
 
-        <p className="print:hidden mt-6 text-sm text-slate-500">
-          画面表示: 今回請求額 {yen(invoice.total)}（税込）
-        </p>
+        {pageIndex === detailPages.length - 1 && (
+          <p className="print:hidden mt-6 text-sm text-slate-500">
+            画面表示: 今回請求額 {yen(invoice.total)}（税込）
+          </p>
+        )}
       </section>
+      ))}
     </PrintShell>
   );
 }

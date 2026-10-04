@@ -9,6 +9,7 @@ export default function PrintShell({
   backHref,
   wide,
   landscape,
+  bleed,
 }: {
   title: string;
   children: React.ReactNode;
@@ -16,6 +17,11 @@ export default function PrintShell({
   wide?: boolean;
   /** A4 landscape for payment statements etc. */
   landscape?: boolean;
+  /**
+   * A4 with no page margin, so the browser cannot print its title and URL.
+   * The sheet itself keeps the margin as padding.
+   */
+  bleed?: boolean;
 }) {
   return (
     <div className="min-h-screen bg-slate-100 print:bg-white">
@@ -33,9 +39,9 @@ export default function PrintShell({
         </button>
       </div>
       <div
-        className={`mx-auto my-8 bg-white shadow-lg print:shadow-none print:my-0 print:max-w-none p-8 print:p-4 ${
-          wide || landscape ? "max-w-5xl" : "max-w-4xl"
-        }`}
+        className={`mx-auto my-8 bg-white shadow-lg print:shadow-none print:my-0 print:max-w-none p-8 ${
+          bleed ? "print:p-0" : "print:p-4"
+        } ${wide || landscape ? "max-w-5xl" : "max-w-4xl"}`}
       >
         {children}
       </div>
@@ -43,27 +49,42 @@ export default function PrintShell({
         @media print {
           @page {
             size: ${landscape ? "A4 landscape" : "A4"};
-            margin: 12mm;
+            margin: ${bleed ? "0" : "12mm"};
           }
+          html,
           body {
             background: white !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            ${bleed ? "margin: 0 !important; padding: 0 !important;" : ""}
           }
-          .print\\:hidden {
-            display: none !important;
-          }
+          .print\\:hidden,
           aside,
-          nav {
+          nav,
+          button,
+          [role="status"],
+          [role="dialog"] {
             display: none !important;
           }
           .invoice-page {
             break-after: page;
             page-break-after: always;
+            ${
+              bleed
+                ? `box-sizing: border-box;
+            width: 210mm;
+            min-height: 297mm;
+            padding: 14mm 16mm;`
+                : ""
+            }
           }
           .invoice-page:last-child {
             break-after: auto;
             page-break-after: auto;
+          }
+          .invoice-page tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
           }
         }
       `}</style>

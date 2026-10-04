@@ -4,6 +4,7 @@
  * Does not push to git or any external service.
  */
 
+import { readFileSync } from "node:fs";
 import { createSeedData } from "../src/lib/seed.ts";
 import {
   invoiceDetail,
@@ -426,6 +427,28 @@ const droppedAttack = mergeStoredFile(
   null
 );
 assert(!("portalAuth" in droppedAttack), "業務データの保存だけでは内職者パスワードを書き込まない");
+
+console.log("\n9. 請求書の印刷");
+const invoiceSource = readFileSync(
+  new URL("../src/app/print/invoice/[id]/page.tsx", import.meta.url),
+  "utf8"
+);
+const printShellSource = readFileSync(
+  new URL("../src/components/PrintShell.tsx", import.meta.url),
+  "utf8"
+);
+assert(
+  invoiceSource.includes("振込にかかる手数料は差し引かずお願いいたします"),
+  "振込手数料の案内は指定の文面"
+);
+assert(
+  !invoiceSource.includes("振込かかる手数料は"),
+  "古い振込手数料の文面は使わない"
+);
+assert(invoiceSource.includes("text-[1.75rem]"), "振込先は本文より大きい文字");
+assert(invoiceSource.includes("bleed"), "請求書は余白ゼロの印刷を使う");
+assert(printShellSource.includes('margin: ${bleed ? "0" : "12mm"}'), "印刷余白ゼロでブラウザの見出しを消す");
+assert(printShellSource.includes("padding: 14mm 16mm"), "用紙の余白は中身の余白として残す");
 
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);
