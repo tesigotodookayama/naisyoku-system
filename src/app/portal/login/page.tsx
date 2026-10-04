@@ -6,7 +6,14 @@ export default async function PortalLoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const sp = await searchParams;
-  const hasError = sp.error === "1";
+  const errorMessage =
+    sp.error === "unset"
+      ? "パスワードが未設定です。事務所に連絡して、マイページ用パスワードを設定してもらってください。"
+      : sp.error === "changed"
+        ? "この見本のパスワードは変更されています。変更後のパスワードを入力してください。"
+        : sp.error === "1"
+          ? "IDまたはパスワードが正しくありません。"
+          : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900">
@@ -18,9 +25,9 @@ export default async function PortalLoginPage({
         </div>
 
         <div className="rounded-2xl p-6 sm:p-8 bg-white shadow-2xl">
-          {hasError && (
+          {errorMessage && (
             <div className="mb-5 bg-red-50 border-2 border-red-200 text-red-700 rounded-xl p-4 text-center font-bold">
-              IDまたはパスワードが正しくありません。
+              {errorMessage}
             </div>
           )}
 
@@ -60,6 +67,9 @@ export default async function PortalLoginPage({
 
           <div className="mt-6 p-4 rounded-xl bg-amber-50 border border-amber-200">
             <p className="font-bold text-amber-900 mb-2">見本ログイン</p>
+            <p className="text-sm text-amber-900 mb-2">
+              事務所がパスワードを変えたあとは、見本のパスワードでは入れません。変更後のパスワードを入力してください。
+            </p>
             <ul className="text-sm text-slate-700 space-y-2">
               {PORTAL_ACCOUNTS.map((a) => (
                 <li key={a.loginId}>

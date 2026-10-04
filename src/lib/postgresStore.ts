@@ -3,11 +3,17 @@ import { neon } from "@neondatabase/serverless";
 import type { AppData } from "./types";
 import { createSeedData } from "./seed";
 import { toPublicAppData } from "./dbShape";
-import { parseAdminAuth, type AdminAuthRecord } from "./adminAuthRecord";
+import {
+  parseAdminAuth,
+  parsePortalPasswordMap,
+  type AdminAuthRecord,
+  type PortalPasswordMap,
+} from "./adminAuthRecord";
 import { databaseUrl, postgresDriver } from "./storageMode";
 
 const DB_KEY = "db";
 const AUTH_KEY = "adminAuth";
+const PORTAL_KEY = "portalAuth";
 
 const CREATE_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS app_store (
@@ -138,6 +144,20 @@ export async function readStoredAdminAuth(): Promise<AdminAuthRecord | null> {
 export async function writeStoredAdminAuth(record: AdminAuthRecord): Promise<void> {
   const { sql } = await currentSession();
   await upsert(sql, AUTH_KEY, record);
+}
+
+/** null when the row has never been written. An empty object is stored on purpose. */
+export async function readStoredPortalPasswords(): Promise<PortalPasswordMap | null> {
+  const { sql } = await currentSession();
+  const rows = await rowsFor(sql, [PORTAL_KEY]);
+  const row = rows.find((item) => item.key === PORTAL_KEY);
+  if (!row) return null;
+  return parsePortalPasswordMap(row.value);
+}
+
+export async function writeStoredPortalPasswords(map: PortalPasswordMap): Promise<void> {
+  const { sql } = await currentSession();
+  await upsert(sql, PORTAL_KEY, map);
 }
 
 export async function resetAppData(): Promise<AppData> {

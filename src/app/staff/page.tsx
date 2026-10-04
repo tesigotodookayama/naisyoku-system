@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
   EmptyState,
@@ -17,6 +17,10 @@ import {
 import { useFeedback } from "@/components/Feedback";
 import { useData } from "@/lib/DataContext";
 import { newId, paymentTotal, yen, activityYearMonth } from "@/lib/business";
+import {
+  validatePortalLoginId,
+  validatePortalPassword,
+} from "@/lib/portalPasswordPolicy";
 import type { Staff } from "@/lib/types";
 
 const emptyStaff = (): Omit<Staff, "id" | "createdAt"> => ({
@@ -34,7 +38,10 @@ const emptyStaff = (): Omit<Staff, "id" | "createdAt"> => ({
   skills: "",
   status: "active",
   notes: "",
+  loginId: "",
 });
+
+const CONFIRM_MISMATCH = "新しいパスワード（確認）が一致しません。もう一度入力してください。";
 
 export default function StaffPage() {
   const { data, loading, update } = useData();
@@ -44,6 +51,41 @@ export default function StaffPage() {
   const [editing, setEditing] = useState<Staff | null>(null);
   const [form, setForm] = useState(emptyStaff());
   const [formError, setFormError] = useState<string | null>(null);
+  const [portalPassword, setPortalPassword] = useState("");
+  const [portalPasswordConfirm, setPortalPasswordConfirm] = useState("");
+  const [passwordSet, setPasswordSet] = useState<Record<string, boolean>>({});
+  const [passwordReady, setPasswordReady] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwStaff, setPwStaff] = useState<Staff | null>(null);
+  const [pwLoginId, setPwLoginId] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwBusy, setPwBusy] = useState(false);
+
+  const loadPasswordStatus = async () => {
+    try {
+      const res = await fetch("/api/admin/staff-password", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        ok?: boolean;
+        items?: { staffId: string; hasPassword: boolean }[];
+      };
+      if (!json.ok || !json.items) return;
+      const next: Record<string, boolean> = {};
+      for (const item of json.items) {
+        if (item.hasPassword) next[item.staffId] = true;
+      }
+      setPasswordSet(next);
+      setPasswordReady(true);
+    } catch {
+      // The list still works. Status stays hidden until the next load.
+    }
+  };
+
+  useEffect(() => {
+    void loadPasswordStatus();
+  }, []);
 
   const staffList = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -52,13 +94,20 @@ export default function StaffPage() {
         !term ||
         s.name.toLowerCase().includes(term) ||
         s.skills.toLowerCase().includes(term) ||
-        s.tel.includes(term)
+        s.tel.includes(term) ||
+        s.loginId.toLowerCase().includes(term)
     );
   }, [data.staff, q]);
+
+  const clearPortalFields = () => {
+    setPortalPassword("");
+    setPortalPasswordConfirm("");
+  };
 
   const openNew = () => {
     setEditing(null);
     setForm(emptyStaff());
+    clearPortalFields();
     setFormError(null);
     setOpen(true);
   };
@@ -80,9 +129,20 @@ export default function StaffPage() {
       skills: s.skills,
       status: s.status,
       notes: s.notes,
+      loginId: s.loginId ?? "",
     });
+    clearPortalFields();
     setFormError(null);
     setOpen(true);
+  };
+
+  const openPassword = (s: Staff) => {
+    setPwStaff(s);
+    setPwLoginId(s.loginId ?? "");
+    setPwNew("");
+    setPwConfirm("");
+    setPwError(null);
+    setPwOpen(true);
   };
 
   const save = async () => {
@@ -90,26 +150,150 @@ export default function StaffPage() {
       setFormError("氏名は必須です");
       return;
     }
-    try {
-    await update((prev) => {
-      if (editing) {
-        return {
-          ...prev,
-          staff: prev.staff.map((s) => (s.id === editing.id ? { ...s, ...form } : s)),
-        };
+    const loginId = form.loginId.trim();
+    const wantsPassword = portalPassword.length > 0 || portalPasswordConfirm.length > 0;
+    if (loginId || wantsPassword) {
+      const loginError = validatePortalLoginId(loginId);
+      if (loginError) {
+        setFormError(loginError);
+        return;
       }
-      const staff: Staff = {
-        ...form,
-        id: newId("stf"),
-        createdAt: new Date().toISOString(),
-      };
-      return { ...prev, staff: [...prev.staff, staff] };
-    });
-    setOpen(false);
-    toast(editing ? "内職者情報を更新しました" : "内職者を登録しました。ポータルログインは管理者にお問い合わせください。", "success");
+    }
+    if (wantsPassword) {
+      const passwordError = validatePortalPassword(portalPassword);
+      if (passwordError) {
+        setFormError(passwordError);
+        return;
+      }
+      if (portalPasswordConfirm !== portalPassword) {
+        setFormError(CONFIRM_MISMATCH);
+        return;
+      }
+    }
+    const duplicate = data.staff.some(
+      (s) =>
+        s.id !== editing?.id &&
+        loginId.length > 0 &&
+        s.loginId.trim().toLowerCase() === loginId.toLowerCase()
+    );
+    if (duplicate) {
+      setFormError("このログインIDは別の内職者が使っています。");
+      return;
+    }
+
+    const staffId = editing?.id ?? newId("stf");
+    const nextForm = { ...form, loginId };
+    try {
+      await update((prev) => {
+        if (editing) {
+          return {
+            ...prev,
+            staff: prev.staff.map((s) => (s.id === editing.id ? { ...s, ...nextForm } : s)),
+          };
+        }
+        const staff: Staff = {
+          ...nextForm,
+          id: staffId,
+          createdAt: new Date().toISOString(),
+        };
+        return { ...prev, staff: [...prev.staff, staff] };
+      });
     } catch {
       setFormError("保存に失敗しました");
       toast("保存に失敗しました", "error");
+      return;
+    }
+
+    if (!wantsPassword) {
+      setOpen(false);
+      toast(editing ? "内職者情報を更新しました" : "内職者を登録しました", "success");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/admin/staff-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId,
+          loginId,
+          password: portalPassword,
+          confirmPassword: portalPasswordConfirm,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
+      if (!res.ok || !json?.ok) {
+        setFormError(json?.message || "パスワードを保存できませんでした。");
+        toast(json?.message || "パスワードを保存できませんでした。", "error");
+        return;
+      }
+      setPasswordSet((prev) => ({ ...prev, [staffId]: true }));
+      setPasswordReady(true);
+      setOpen(false);
+      toast(json.message || "マイページのパスワードを設定しました。", "success");
+    } catch {
+      setFormError("パスワードの保存に失敗しました。もう一度お試しください。");
+      toast("パスワードの保存に失敗しました。", "error");
+    }
+  };
+
+  const savePassword = async () => {
+    if (!pwStaff) return;
+    const loginId = pwLoginId.trim();
+    const loginError = validatePortalLoginId(loginId);
+    if (loginError) {
+      setPwError(loginError);
+      return;
+    }
+    const passwordError = validatePortalPassword(pwNew);
+    if (passwordError) {
+      setPwError(passwordError);
+      return;
+    }
+    if (pwConfirm !== pwNew) {
+      setPwError(CONFIRM_MISMATCH);
+      return;
+    }
+    const duplicate = data.staff.some(
+      (s) => s.id !== pwStaff.id && s.loginId.trim().toLowerCase() === loginId.toLowerCase()
+    );
+    if (duplicate) {
+      setPwError("このログインIDは別の内職者が使っています。");
+      return;
+    }
+
+    setPwBusy(true);
+    setPwError(null);
+    try {
+      if (pwStaff.loginId !== loginId) {
+        await update((prev) => ({
+          ...prev,
+          staff: prev.staff.map((s) => (s.id === pwStaff.id ? { ...s, loginId } : s)),
+        }));
+      }
+      const res = await fetch("/api/admin/staff-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId: pwStaff.id,
+          loginId,
+          password: pwNew,
+          confirmPassword: pwConfirm,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
+      if (!res.ok || !json?.ok) {
+        setPwError(json?.message || "パスワードを保存できませんでした。");
+        return;
+      }
+      setPasswordSet((prev) => ({ ...prev, [pwStaff.id]: true }));
+      setPasswordReady(true);
+      setPwOpen(false);
+      toast(json.message || "マイページのパスワードを設定しました。", "success");
+    } catch {
+      setPwError("パスワードの保存に失敗しました。もう一度お試しください。");
+    } finally {
+      setPwBusy(false);
     }
   };
 
@@ -131,6 +315,14 @@ export default function StaffPage() {
         ...prev,
         staff: prev.staff.filter((x) => x.id !== s.id),
       }));
+      await fetch(`/api/admin/staff-password?staffId=${encodeURIComponent(s.id)}`, {
+        method: "DELETE",
+      }).catch(() => undefined);
+      setPasswordSet((prev) => {
+        const next = { ...prev };
+        delete next[s.id];
+        return next;
+      });
       toast("内職者を削除しました", "success");
     } catch {
       toast("削除に失敗しました", "error");
@@ -150,7 +342,7 @@ export default function StaffPage() {
       <div className="fade-in">
         <PageHeader
           title="内職者管理"
-          description="在宅で作業する方の連絡先・口座を管理します。出荷・入荷・支払はこの名簿に紐づきます。"
+          description="在宅で作業する方の連絡先・口座と、マイページ用のパスワードを管理します。出荷・入荷・支払はこの名簿に紐づきます。"
           actions={
             <button type="button" className="btn btn-primary" onClick={openNew}>
               新規内職者登録
@@ -158,7 +350,7 @@ export default function StaffPage() {
           }
         />
 
-        <SearchBar value={q} onChange={setQ} placeholder="氏名・スキル・電話で検索" />
+        <SearchBar value={q} onChange={setQ} placeholder="氏名・スキル・電話・ログインIDで検索" />
 
         {staffList.length === 0 ? (
           <section className="card-flat card">
@@ -178,6 +370,7 @@ export default function StaffPage() {
                   <th className="pb-3 px-2 font-semibold">連絡先</th>
                   <th className="pb-3 px-2 font-semibold">スキル</th>
                   <th className="pb-3 px-2 font-semibold">状態</th>
+                  <th className="pb-3 px-2 font-semibold">マイページ</th>
                   <th className="pb-3 px-2 font-semibold text-right">対象月の報酬</th>
                   <th className="pb-3 px-2 font-semibold text-right">操作</th>
                 </tr>
@@ -203,10 +396,30 @@ export default function StaffPage() {
                           tone={s.status === "active" ? "emerald" : "slate"}
                         />
                       </td>
+                      <td className="py-4 px-2 text-sm">
+                        <div className="font-mono">{s.loginId.trim() || "ID未設定"}</div>
+                        <div className="mt-1">
+                          {passwordReady ? (
+                            <StatusBadge
+                              label={passwordSet[s.id] ? "設定済み" : "未設定"}
+                              tone={passwordSet[s.id] ? "emerald" : "slate"}
+                            />
+                          ) : (
+                            <span className="text-slate-400">確認中</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-4 px-2 text-right font-bold text-primary">
                         {yen(reward)}
                       </td>
                       <td className="py-4 px-2 text-right space-x-3">
+                        <button
+                          type="button"
+                          className="text-sm font-bold text-primary hover:underline min-h-11"
+                          onClick={() => openPassword(s)}
+                        >
+                          パスワード設定
+                        </button>
                         <button
                           type="button"
                           className="text-sm font-bold text-primary hover:underline min-h-11"
@@ -259,6 +472,54 @@ export default function StaffPage() {
                 <option value="inactive">停止</option>
               </FormSelect>
             </Field>
+            <div className="md:col-span-2 rounded-xl border-2 border-amber-200 bg-amber-50 p-4 space-y-4">
+              <div>
+                <p className="font-bold text-amber-950">マイページ</p>
+                <p className="text-sm text-amber-900 mt-1">
+                  内職者さんが自分の画面に入るためのIDとパスワードです。パスワードは保存したあと、画面には出ません。編集のとき、パスワードを空欄のまま保存すると、今のパスワードのままです。
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field
+                  label="マイページ用ログインID"
+                  htmlFor="staff-login-id"
+                  hint="英数字4〜32文字。例: sato001"
+                >
+                  <FormInput
+                    id="staff-login-id"
+                    value={form.loginId}
+                    autoComplete="off"
+                    onChange={(e) => setForm({ ...form, loginId: e.target.value })}
+                  />
+                </Field>
+                <Field
+                  label="マイページ用パスワード"
+                  htmlFor="staff-portal-password"
+                  hint="8文字以上。空欄なら今のパスワードのままです。"
+                >
+                  <FormInput
+                    id="staff-portal-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={portalPassword}
+                    onChange={(e) => setPortalPassword(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="マイページ用パスワード（確認）"
+                  htmlFor="staff-portal-password-confirm"
+                  hint="パスワードを入れるときだけ、もう一度同じものを入れてください。"
+                >
+                  <FormInput
+                    id="staff-portal-password-confirm"
+                    type="password"
+                    autoComplete="new-password"
+                    value={portalPasswordConfirm}
+                    onChange={(e) => setPortalPasswordConfirm(e.target.value)}
+                  />
+                </Field>
+              </div>
+            </div>
             <Field label="電話">
               <FormInput
                 value={form.tel}
@@ -346,6 +607,63 @@ export default function StaffPage() {
             </button>
             <button type="button" className="btn btn-primary" onClick={() => void save()}>
               保存
+            </button>
+          </div>
+        </Modal>
+
+        <Modal
+          open={pwOpen}
+          title="パスワード設定"
+          onClose={() => setPwOpen(false)}
+        >
+          <p className="text-sm text-slate-600 mb-4">
+            {pwStaff ? `${pwStaff.name} さんのマイページ用パスワードを設定します。` : ""}
+            いまのパスワードは表示しません。新しいパスワードは8文字以上にしてください。
+          </p>
+          {pwError && (
+            <p className="mb-4 rounded-xl border-2 border-red-200 bg-red-50 text-red-800 font-bold px-4 py-3">
+              {pwError}
+            </p>
+          )}
+          <div className="space-y-4">
+            <Field label="マイページ用ログインID" htmlFor="pw-login-id" required hint="英数字4〜32文字">
+              <FormInput
+                id="pw-login-id"
+                value={pwLoginId}
+                autoComplete="off"
+                onChange={(e) => setPwLoginId(e.target.value)}
+              />
+            </Field>
+            <Field label="新しいパスワード" htmlFor="pw-new" required hint="8文字以上">
+              <FormInput
+                id="pw-new"
+                type="password"
+                autoComplete="new-password"
+                value={pwNew}
+                onChange={(e) => setPwNew(e.target.value)}
+              />
+            </Field>
+            <Field label="新しいパスワード（確認）" htmlFor="pw-confirm" required>
+              <FormInput
+                id="pw-confirm"
+                type="password"
+                autoComplete="new-password"
+                value={pwConfirm}
+                onChange={(e) => setPwConfirm(e.target.value)}
+              />
+            </Field>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" className="btn btn-outline" onClick={() => setPwOpen(false)}>
+              キャンセル
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={pwBusy}
+              onClick={() => void savePassword()}
+            >
+              {pwBusy ? "保存しています..." : "パスワードを保存"}
             </button>
           </div>
         </Modal>

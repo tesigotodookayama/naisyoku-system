@@ -14,19 +14,15 @@ export const PORTAL_ACCOUNTS: readonly {
   { loginId: "neko003", password: "pass9012", staffId: "stf_neko" },
 ];
 
+/** Login id used when an older saved staff row has none yet. */
+export function defaultLoginIdForStaff(staffId: string): string {
+  return PORTAL_ACCOUNTS.find((account) => account.staffId === staffId)?.loginId ?? "";
+}
+
 export const PORTAL_SESSION_KEY = "portal_user";
 export const PORTAL_COOKIE = "portal_session";
 
-export function authenticatePortal(
-  loginId: string,
-  password: string
-): PortalSession | null {
-  const id = loginId.trim();
-  const account = PORTAL_ACCOUNTS.find((a) => a.loginId === id);
-  if (!account || account.password !== password) return null;
-  return { loginId: account.loginId, staffId: account.staffId };
-}
-
+/** Cookie shape only. The server checks the worker and stored password separately. */
 export function parsePortalCookie(raw: string | undefined | null): PortalSession | null {
   if (!raw) return null;
   let value = raw;
@@ -36,12 +32,8 @@ export function parsePortalCookie(raw: string | undefined | null): PortalSession
     value = raw;
   }
   const [staffId, loginId] = value.split("|");
-  if (!staffId || !loginId) return null;
-  const account = PORTAL_ACCOUNTS.find(
-    (a) => a.staffId === staffId && a.loginId === loginId
-  );
-  if (!account) return null;
-  return { staffId: account.staffId, loginId: account.loginId };
+  if (!staffId || !loginId || value.split("|").length !== 2) return null;
+  return { staffId, loginId };
 }
 
 export function readPortalSession(): PortalSession | null {

@@ -215,7 +215,8 @@ assert(validateArriveQty(pendingAsn, 800) == null, "出荷数と同じ入荷は�
 assert(validateArriveQty(pendingAsn, 780) == null, "欠品入荷は許可");
 
 console.log("\n6. 管理者パスワード");
-const { validatePasswordChange } = await import("../src/lib/adminPasswordPolicy.ts");
+const { validatePasswordChange, MIN_ADMIN_PASSWORD_LENGTH, MAX_ADMIN_PASSWORD_LENGTH } =
+  await import("../src/lib/adminPasswordPolicy.ts");
 const { hashPassword, verifyPassword, passwordMatchesStoredOrEnv } = await import(
   "../src/lib/adminPasswordHash.ts"
 );
@@ -353,6 +354,78 @@ assert(
   postgresDriver("postgres://naisyoku:naisyoku@127.0.0.1:5432/naisyoku") === "pg",
   "手元の Postgres は通常の接続"
 );
+
+console.log("\n8. 内職者マイページのパスワード");
+const {
+  validatePortalLoginId,
+  validatePortalPassword,
+  portalLoginState,
+  MIN_PORTAL_PASSWORD_LENGTH,
+  MAX_PORTAL_PASSWORD_LENGTH,
+} = await import("../src/lib/portalPasswordPolicy.ts");
+assert(
+  MIN_PORTAL_PASSWORD_LENGTH === MIN_ADMIN_PASSWORD_LENGTH &&
+    MAX_PORTAL_PASSWORD_LENGTH === MAX_ADMIN_PASSWORD_LENGTH,
+  "マイページ用パスワードの文字数は管理者と同じ"
+);
+const { PORTAL_ACCOUNTS, defaultLoginIdForStaff } = await import("../src/lib/portalAuth.ts");
+
+assert(validatePortalLoginId("  ") != null, "空のログインIDを拒否");
+assert(validatePortalLoginId("ab") != null, "短すぎるログインIDを拒否");
+assert(validatePortalLoginId("sato 001") != null, "空白を含むログインIDを拒否");
+assert(validatePortalLoginId("sato001") == null, "見本のログインIDは許可");
+assert(validatePortalPassword("") != null, "空のマイページ用パスワードを拒否");
+assert(validatePortalPassword("short") != null, "8文字未満のマイページ用パスワードを拒否");
+assert(validatePortalPassword("pass1234") == null, "8文字のマイページ用パスワードは許可");
+assert(portalLoginState(false, false) === "unset", "未設定はログインできない");
+assert(portalLoginState(true, false) === "reject", "違うパスワードは拒否");
+assert(portalLoginState(true, true) === "ok", "正しいパスワードは許可");
+assert(defaultLoginIdForStaff("stf_sato") === "sato001", "見本の佐藤さんにログインIDを付ける");
+assert(defaultLoginIdForStaff("stf_unknown") === "", "不明な内職者のログインIDは空");
+
+for (const account of PORTAL_ACCOUNTS) {
+  const person = seeded.staff.find((item) => item.id === account.staffId);
+  assert(person?.loginId === account.loginId, `${account.loginId} が見本データにある`);
+  assert(account.password.length >= 8, `${account.loginId} の見本パスワードは8文字以上`);
+}
+
+const sampleHash = await hashPassword("pass1234");
+assert(sampleHash.startsWith("scrypt$"), "見本パスワードも scrypt");
+assert(!sampleHash.includes("pass1234"), "見本パスワードのハッシュに平文を含まない");
+
+const hiddenPortal = stripAdminAuth({
+  ...seeded,
+  adminAuth: { passwordHash: hash, updatedAt: "2026-10-04T00:00:00.000Z" },
+  portalAuth: {
+    stf_sato: { passwordHash: sampleHash, updatedAt: "2026-10-04T00:00:00.000Z" },
+  },
+});
+assert(!("portalAuth" in hiddenPortal), "公開データに内職者パスワードを含めない");
+assert(!("adminAuth" in hiddenPortal), "公開データに管理者パスワードを含めない");
+assert(!JSON.stringify(hiddenPortal).includes(sampleHash), "公開データにハッシュ文字列を含めない");
+
+const keptPortal = mergeStoredFile(
+  {
+    ...seeded,
+    portalAuth: { stf_sato: { passwordHash: "attacker", updatedAt: "x" } },
+  },
+  { passwordHash: "real-hash", updatedAt: "t" },
+  { stf_sato: { passwordHash: "real-portal", updatedAt: "t" } }
+);
+assert(
+  keptPortal.portalAuth?.stf_sato.passwordHash === "real-portal",
+  "保存時は内職者の既存ハッシュを維持する"
+);
+assert(keptPortal.adminAuth?.passwordHash === "real-hash", "内職者パスワード保存でも管理者ハッシュを維持する");
+
+const droppedAttack = mergeStoredFile(
+  {
+    ...seeded,
+    portalAuth: { stf_sato: { passwordHash: "attacker", updatedAt: "x" } },
+  },
+  null
+);
+assert(!("portalAuth" in droppedAttack), "業務データの保存だけでは内職者パスワードを書き込まない");
 
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

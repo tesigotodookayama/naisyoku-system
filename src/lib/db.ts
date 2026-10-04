@@ -5,13 +5,15 @@ import { createSeedData } from "./seed";
 import {
   mergeStoredFile,
   parseAdminAuth,
+  parsePortalPasswordMap,
   type AdminAuthRecord,
   type DbFile,
+  type PortalPasswordMap,
 } from "./adminAuthRecord";
 import { toPublicAppData } from "./dbShape";
 import { isPersistentStore, storageKind } from "./storageMode";
 
-export type { AdminAuthRecord } from "./adminAuthRecord";
+export type { AdminAuthRecord, PortalPasswordMap } from "./adminAuthRecord";
 export { mergeStoredFile, stripAdminAuth } from "./adminAuthRecord";
 export { toPublicAppData } from "./dbShape";
 export { databaseUrl, isPersistentStore, postgresDriver, storageKind } from "./storageMode";
@@ -78,6 +80,17 @@ export async function readDb(): Promise<AppData> {
   }
 }
 
+/** null when portal passwords have never been saved. */
+export async function readPortalPasswordMap(): Promise<PortalPasswordMap | null> {
+  if (postgresEnabled()) {
+    const { readStoredPortalPasswords } = await import("./postgresStore");
+    return readStoredPortalPasswords();
+  }
+  const raw = await readRaw();
+  if (!raw || !Object.prototype.hasOwnProperty.call(raw, "portalAuth")) return null;
+  return parsePortalPasswordMap(raw.portalAuth);
+}
+
 export async function writeDb(data: AppData): Promise<void> {
   if (postgresEnabled()) {
     const { writeAppData } = await import("./postgresStore");
@@ -86,7 +99,8 @@ export async function writeDb(data: AppData): Promise<void> {
   }
   await ensureDir();
   const adminAuth = await readAdminAuth();
-  const file = mergeStoredFile(toPublicAppData(data), adminAuth);
+  const portalAuth = await readPortalPasswordMap();
+  const file = mergeStoredFile(toPublicAppData(data), adminAuth, portalAuth);
   await fs.writeFile(DB_PATH, JSON.stringify(file, null, 2), "utf-8");
 }
 
@@ -97,8 +111,22 @@ export async function writeAdminAuth(record: AdminAuthRecord): Promise<void> {
     return;
   }
   const data = await readDb();
+  const portalAuth = await readPortalPasswordMap();
   await ensureDir();
-  const file = mergeStoredFile(data, record);
+  const file = mergeStoredFile(data, record, portalAuth);
+  await fs.writeFile(DB_PATH, JSON.stringify(file, null, 2), "utf-8");
+}
+
+export async function writePortalPasswordMap(map: PortalPasswordMap): Promise<void> {
+  if (postgresEnabled()) {
+    const { writeStoredPortalPasswords } = await import("./postgresStore");
+    await writeStoredPortalPasswords(map);
+    return;
+  }
+  const data = await readDb();
+  const adminAuth = await readAdminAuth();
+  await ensureDir();
+  const file = mergeStoredFile(data, adminAuth, map);
   await fs.writeFile(DB_PATH, JSON.stringify(file, null, 2), "utf-8");
 }
 

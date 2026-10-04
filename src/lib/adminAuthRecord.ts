@@ -6,18 +6,55 @@ export type AdminAuthRecord = {
   updatedAt: string;
 };
 
-export type DbFile = AppData & { adminAuth?: AdminAuthRecord };
+/** One worker's portal password. Keyed by staff id. Never sent to the browser. */
+export type PortalPasswordEntry = {
+  passwordHash: string;
+  updatedAt: string;
+};
+
+export type PortalPasswordMap = Record<string, PortalPasswordEntry>;
+
+export type DbFile = AppData & {
+  adminAuth?: AdminAuthRecord;
+  portalAuth?: PortalPasswordMap;
+};
 
 export function stripAdminAuth(data: DbFile): AppData {
   const copy: DbFile = { ...data };
   delete copy.adminAuth;
+  delete copy.portalAuth;
   return copy;
 }
 
-/** Keep the hash already on disk. Ignore any adminAuth a client tried to send. */
-export function mergeStoredFile(data: DbFile, adminAuth: AdminAuthRecord | null): DbFile {
+/**
+ * Keep hashes already on disk. A client payload cannot set or clear them.
+ * Pass portalAuth only when it should be written; omit it to leave the key off.
+ */
+export function mergeStoredFile(
+  data: DbFile,
+  adminAuth: AdminAuthRecord | null,
+  portalAuth?: PortalPasswordMap | null
+): DbFile {
   const pub = stripAdminAuth(data);
-  return adminAuth ? { ...pub, adminAuth } : pub;
+  const file: DbFile = { ...pub };
+  if (adminAuth) file.adminAuth = adminAuth;
+  if (portalAuth) file.portalAuth = portalAuth;
+  return file;
+}
+
+export function parsePortalPasswordMap(value: unknown): PortalPasswordMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: PortalPasswordMap = {};
+  for (const [staffId, entry] of Object.entries(value)) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Partial<PortalPasswordEntry>;
+    if (typeof record.passwordHash !== "string" || !record.passwordHash) continue;
+    out[staffId] = {
+      passwordHash: record.passwordHash,
+      updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : "",
+    };
+  }
+  return out;
 }
 
 export function parseAdminAuth(value: unknown): AdminAuthRecord | null {

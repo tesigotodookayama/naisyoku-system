@@ -90,7 +90,7 @@ export default function MyPageClient({ session }: { session: PortalSession }) {
           <p className="text-sm opacity-90">てしごと堂 内職者ポータル</p>
           <h1 className="text-xl font-black">{staff.name} 様</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="flex bg-white/15 p-1 rounded-xl">
             {(["standard", "large", "extra-large"] as const).map((size, i) => (
               <button
@@ -105,6 +105,9 @@ export default function MyPageClient({ session }: { session: PortalSession }) {
               </button>
             ))}
           </div>
+          <a href="/portal/password" className="min-h-11 px-3 rounded-xl bg-white/20 font-bold inline-flex items-center text-sm">
+            パスワード変更
+          </a>
           <a href="/api/portal/logout" className="min-h-11 px-3 rounded-xl bg-white/20 font-bold inline-flex items-center">
             ログアウト
           </a>
@@ -261,6 +264,12 @@ export default function MyPageClient({ session }: { session: PortalSession }) {
             <FieldBlock label="ログインID">
               <p className="font-mono bg-slate-100 rounded-lg p-3">{session.loginId}</p>
             </FieldBlock>
+            <a href="/portal/password" className="btn btn-outline w-full">
+              パスワード変更
+            </a>
+            <p className="text-sm text-slate-500 -mt-2">
+              いまのパスワードを入れて、自分で新しいパスワードに変えられます。
+            </p>
             {(
               [
                 ["氏名", "name"],

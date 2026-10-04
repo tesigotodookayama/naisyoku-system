@@ -70,6 +70,7 @@ export function createSeedData(): AppData {
         skills: "封筒, シール",
         status: "active",
         notes: "",
+        loginId: "sato001",
         createdAt: "2026-03-01T00:00:00.000Z",
       },
       {
@@ -88,6 +89,7 @@ export function createSeedData(): AppData {
         skills: "袋詰め, 検品",
         status: "active",
         notes: "",
+        loginId: "tanaka002",
         createdAt: "2026-03-01T00:00:00.000Z",
       },
       {
@@ -106,6 +108,7 @@ export function createSeedData(): AppData {
         skills: "大量案件対応可",
         status: "active",
         notes: "",
+        loginId: "neko003",
         createdAt: "2026-03-01T00:00:00.000Z",
       },
     ],

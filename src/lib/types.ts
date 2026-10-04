@@ -42,6 +42,8 @@ export type Staff = {
   skills: string;
   status: "active" | "inactive";
   notes: string;
+  /** Portal login id. Not a secret. Empty until the office sets one. */
+  loginId: string;
   createdAt: string;
 };
 

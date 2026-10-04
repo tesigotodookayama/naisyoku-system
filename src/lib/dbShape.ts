@@ -1,6 +1,7 @@
 import type { AppData, Invoice, Staff } from "./types";
 import { formatDocNo } from "./business";
 import { stripAdminAuth, type DbFile } from "./adminAuthRecord";
+import { defaultLoginIdForStaff } from "./portalAuth";
 
 /** Migrate older saved JSON shapes. Does not keep adminAuth. */
 export function normalizeAppData(data: AppData): AppData {
@@ -9,6 +10,8 @@ export function normalizeAppData(data: AppData): AppData {
     staff: data.staff.map((s: Staff) => ({
       ...s,
       emergencyTel: s.emergencyTel ?? "",
+      loginId:
+        typeof s.loginId === "string" ? s.loginId : defaultLoginIdForStaff(s.id),
     })),
     invoices: data.invoices.map((inv: Invoice, i) => ({
       ...inv,
