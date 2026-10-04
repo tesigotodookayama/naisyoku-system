@@ -89,13 +89,6 @@ export default async function PortalLoginPage({
             </ul>
           </div>
         </div>
-
-        <p className="text-center text-slate-400 text-sm mt-6">
-          管理者の方は{" "}
-          <a href="/admin/login" className="text-amber-300 underline">
-            管理画面へ
-          </a>
-        </p>
       </div>
     </div>
   );
