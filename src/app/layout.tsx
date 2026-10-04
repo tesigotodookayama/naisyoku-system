@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   title: "てしごと堂 | 内職管理システム",
   description:
     "案件・内職者割当・出荷入荷・納品・請求・支払・月報を一元管理する在宅ワーク運営向けシステム",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({

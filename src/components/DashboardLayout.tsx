@@ -15,6 +15,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [open, setOpen] = useState(false);
   const { error } = useData();
   const [storage, setStorage] = useState<StorageStatus | null>(null);
+  const [accessWarning, setAccessWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +27,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!cancelled && json.storage) setStorage(json);
       } catch {
         // Leave the banner hidden if the status cannot be loaded.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/access", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as { warning?: string | null };
+        if (!cancelled) setAccessWarning(json.warning ?? null);
+      } catch {
+        // The address card on the password page still explains the setting.
       }
     })();
     return () => {
@@ -70,6 +88,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         <div className="p-4 sm:p-8 print:p-0">
           <div className="max-w-7xl mx-auto space-y-4">
+            {accessWarning && (
+              <div className="print:hidden">
+                <Banner tone="warn">{accessWarning}</Banner>
+              </div>
+            )}
             {error && (
               <Banner tone="error">
                 データの読み込みに失敗しました（{error}）。画面を再読み込みしてください。シードデータで続行できます。

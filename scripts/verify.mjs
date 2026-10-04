@@ -450,5 +450,178 @@ assert(invoiceSource.includes("bleed"), "請求書は余白ゼロの印刷を使
 assert(printShellSource.includes('margin: ${bleed ? "0" : "12mm"}'), "印刷余白ゼロでブラウザの見出しを消す");
 assert(printShellSource.includes("padding: 14mm 16mm"), "用紙の余白は中身の余白として残す");
 
+console.log("\n10. 秘密のアドレス");
+const {
+  readAccessKey,
+  keysMatch,
+  accessCookieValue,
+  cookieMatches,
+  decideAccess,
+  entryUrl,
+  accessWarning,
+  isPublicAsset,
+  isPortalPath,
+} = await import("../src/lib/accessGate.ts");
+
+assert(readAccessKey(undefined) == null, "未設定の鍵は無い");
+assert(readAccessKey("   ") == null, "空白だけの鍵は無い");
+assert(readAccessKey(" secret ") === "secret", "鍵の前後の空白を除く");
+assert(await keysMatch("same-key", "same-key"), "同じ鍵は一致");
+assert(!(await keysMatch("same-key", "other-key")), "違う鍵は不一致");
+assert(!(await keysMatch("short", "much-longer-secret")), "長さが違う鍵は不一致");
+const token = await accessCookieValue("admin-secret");
+assert(token.length === 64, "クッキーの値はハッシュ");
+assert(!token.includes("admin-secret"), "クッキーに鍵そのものを入れない");
+assert(await cookieMatches(token, "admin-secret"), "正しいクッキーは通る");
+assert(!(await cookieMatches("deadbeef", "admin-secret")), "違うクッキーは通らない");
+assert(!(await cookieMatches(token, "portal-secret")), "別の鍵のクッキーは通らない");
+assert(isPublicAsset("/robots.txt"), "robots.txt は公開");
+assert(isPublicAsset("/_next/static/chunk.js"), "静的ファイルは公開");
+assert(isPortalPath("/portal/login"), "マイページのログインは内職者側");
+assert(!isPortalPath("/admin/login"), "管理者ログインは内職者側ではない");
+assert(
+  entryUrl("https://example.com", "admin", "a b") === "https://example.com/admin/login?key=a%20b",
+  "管理者の入口URL"
+);
+assert(
+  entryUrl("https://example.com", "portal", "p") === "https://example.com/portal/login?key=p",
+  "マイページの入口URL"
+);
+assert(accessWarning("development", null, null) == null, "開発中は注意を出さない");
+assert(accessWarning("production", "a", "p") == null, "両方設定済みなら注意は無い");
+assert(accessWarning("production", null, null) != null, "本番で未設定なら注意を出す");
+
+assert(
+  (await decideAccess({
+    pathname: "/",
+    keyParam: null,
+    adminKey: null,
+    portalKey: null,
+    adminCookie: null,
+    portalCookie: null,
+  })) === "allow",
+  "鍵が無ければトップは開ける"
+);
+assert(
+  (await decideAccess({
+    pathname: "/admin/login",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: null,
+    adminCookie: null,
+    portalCookie: null,
+  })) === "deny",
+  "管理者の鍵があるとき、クッキー無しのログイン画面は見せない"
+);
+assert(
+  (await decideAccess({
+    pathname: "/portal/login",
+    keyParam: "wrong",
+    adminKey: null,
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: null,
+  })) === "deny",
+  "違う鍵ではマイページを見せない"
+);
+const granted = await decideAccess({
+  pathname: "/admin/login",
+  keyParam: "admin-secret",
+  adminKey: "admin-secret",
+  portalKey: "portal-secret",
+  adminCookie: null,
+  portalCookie: null,
+});
+assert(granted.grant === "admin", "正しい鍵で管理者のクッキーを出す");
+assert(
+  (await decideAccess({
+    pathname: "/admin/login",
+    keyParam: "wrong",
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: token,
+    portalCookie: null,
+  })) === "deny",
+  "違う鍵は、正しいクッキーがあっても拒否"
+);
+assert(
+  (await decideAccess({
+    pathname: "/api/db",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: token,
+    portalCookie: null,
+  })) === "allow",
+  "管理者のクッキーで共有APIを開ける"
+);
+assert(
+  (await decideAccess({
+    pathname: "/",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: token,
+    portalCookie: null,
+  })) === "allow",
+  "管理者のクッキーがあればトップを開ける"
+);
+const portalToken = await accessCookieValue("portal-secret");
+assert(
+  (await decideAccess({
+    pathname: "/",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: portalToken,
+  })) === "deny",
+  "マイページのクッキーでは管理画面は開けない"
+);
+assert(
+  (await decideAccess({
+    pathname: "/portal/my",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: portalToken,
+  })) === "allow",
+  "マイページのクッキーでマイページを開ける"
+);
+assert(
+  (await decideAccess({
+    pathname: "/api/db",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: null,
+  })) === "deny",
+  "両方の鍵があるとき、クッキー無しのAPIは拒否"
+);
+assert(
+  (await decideAccess({
+    pathname: "/api/portal/login",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: token,
+    portalCookie: null,
+  })) === "deny",
+  "管理者のクッキーでは内職者のAPIは開けない"
+);
+assert(
+  (await decideAccess({
+    pathname: "/robots.txt",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: null,
+  })) === "allow",
+  "robots.txt は鍵がなくても返す"
+);
+
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);
