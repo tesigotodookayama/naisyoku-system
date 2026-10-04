@@ -1,5 +1,3 @@
-import { PORTAL_ACCOUNTS } from "@/lib/portalAuth";
-
 export default async function PortalLoginPage({
   searchParams,
 }: {
@@ -9,9 +7,7 @@ export default async function PortalLoginPage({
   const errorMessage =
     sp.error === "unset"
       ? "パスワードが未設定です。事務所に連絡して、マイページ用パスワードを設定してもらってください。"
-      : sp.error === "changed"
-        ? "この見本のパスワードは変更されています。変更後のパスワードを入力してください。"
-        : sp.error === "1"
+      : sp.error === "changed" || sp.error === "1"
           ? "IDまたはパスワードが正しくありません。"
           : null;
 
@@ -42,7 +38,7 @@ export default async function PortalLoginPage({
                 type="text"
                 required
                 autoComplete="username"
-                placeholder="例: sato001"
+                placeholder="ログインID"
                 className="w-full min-h-12 py-3 px-4 text-lg rounded-xl border-2"
               />
             </div>
@@ -64,30 +60,6 @@ export default async function PortalLoginPage({
               ログインする
             </button>
           </form>
-
-          <div className="mt-6 p-4 rounded-xl bg-amber-50 border border-amber-200">
-            <p className="font-bold text-amber-900 mb-2">見本ログイン</p>
-            <p className="text-sm text-amber-900 mb-2">
-              事務所がパスワードを変えたあとは、見本のパスワードでは入れません。変更後のパスワードを入力してください。
-            </p>
-            <ul className="text-sm text-slate-700 space-y-2">
-              {PORTAL_ACCOUNTS.map((a) => (
-                <li key={a.loginId}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono">
-                      {a.loginId} / {a.password}
-                    </span>
-                    <a
-                      href={`/api/portal/login?demo=${encodeURIComponent(a.loginId)}`}
-                      className="btn btn-outline py-2 px-3 text-sm"
-                    >
-                      入る
-                    </a>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       </div>
     </div>

@@ -4,9 +4,8 @@
  *
  * Accepts JSON (fetch) or HTML form POST.
  * Form success redirects (303) with the session cookie set.
- *
- * Demo: tesigotodo / teshigoto@2026
- * Override with ADMIN_ID / ADMIN_PASSWORD.
+ * A stored hash is checked first. ADMIN_ID / ADMIN_PASSWORD are used only
+ * when no hash is stored.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -65,42 +64,14 @@ async function readCredentials(request: NextRequest): Promise<{
   };
 }
 
-/**
- * Demo login as a plain GET link so the sample account works even when
- * a browser/automation agent cannot submit a form.
- * GET /api/admin/login?demo=1
- */
+/** GET does not sign anyone in. The admin types an ID and password. */
 export async function GET(request: NextRequest) {
-  const demo = request.nextUrl.searchParams.get("demo");
   const redirectTo = safePath(request.nextUrl.searchParams.get("redirect"));
-  if (demo !== "1") {
-    return new NextResponse(null, {
-      status: 303,
-      headers: { Location: "/admin/login" },
-    });
-  }
-  let stored: Awaited<ReturnType<typeof readAdminAuth>> = null;
-  try {
-    stored = await readAdminAuth();
-  } catch (error) {
-    console.error(error);
-    return new NextResponse(null, {
-      status: 303,
-      headers: { Location: "/admin/login?error=1" },
-    });
-  }
-  if (stored?.passwordHash) {
-    return new NextResponse(null, {
-      status: 303,
-      headers: { Location: "/admin/login?error=changed" },
-    });
-  }
-  return withSession(
-    new NextResponse(null, {
-      status: 303,
-      headers: { Location: redirectTo || "/" },
-    })
-  );
+  const qs = redirectTo !== "/" ? `?redirect=${encodeURIComponent(redirectTo)}` : "";
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: `/admin/login${qs}` },
+  });
 }
 
 export async function POST(request: NextRequest) {
