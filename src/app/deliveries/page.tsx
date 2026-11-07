@@ -20,6 +20,7 @@ import { useFeedback } from "@/components/Feedback";
 import { useData } from "@/lib/DataContext";
 import {
   clientName,
+  customerPriceOf,
   lineAmount,
   newestFirst,
   newId,
@@ -201,9 +202,9 @@ export default function DeliveriesPage() {
                       </td>
                       <td className="py-4 px-2">{projectName(data, d.projectId)}</td>
                       <td className="py-4 px-2">{d.qty.toLocaleString()}</td>
-                      <td className="py-4 px-2">{yen(d.unitPrice)}</td>
+                      <td className="py-4 px-2">{yen(customerPriceOf(data, d))}</td>
                       <td className="py-4 px-2 font-bold text-primary">
-                        {yen(lineAmount(d.qty, d.unitPrice))}
+                        {yen(lineAmount(d.qty, customerPriceOf(data, d)))}
                       </td>
                       <td className="py-4 px-2">
                         <StatusBadge

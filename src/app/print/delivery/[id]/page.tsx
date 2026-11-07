@@ -4,7 +4,7 @@ import React, { use } from "react";
 import PrintShell from "@/components/PrintShell";
 import { LoadingBlock } from "@/components/ui";
 import { useData } from "@/lib/DataContext";
-import { clientName, projectName, yen } from "@/lib/business";
+import { clientName, customerPriceOf, lineAmount, projectName, yen } from "@/lib/business";
 
 export default function PrintDeliveryPage({
   params,
@@ -26,7 +26,8 @@ export default function PrintDeliveryPage({
   }
 
   const client = data.clients.find((c) => c.id === delivery.clientId);
-  const amount = delivery.qty * delivery.unitPrice;
+  const unitPrice = customerPriceOf(data, delivery);
+  const amount = lineAmount(delivery.qty, unitPrice);
 
   return (
     <PrintShell title="納品書" backHref="/deliveries">
@@ -61,7 +62,7 @@ export default function PrintDeliveryPage({
           <tr>
             <td className="border p-2">{projectName(data, delivery.projectId)}</td>
             <td className="border p-2 text-right">{delivery.qty.toLocaleString()}</td>
-            <td className="border p-2 text-right">{yen(delivery.unitPrice)}</td>
+            <td className="border p-2 text-right">{yen(unitPrice)}</td>
             <td className="border p-2 text-right font-bold">{yen(amount)}</td>
           </tr>
         </tbody>

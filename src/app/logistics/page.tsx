@@ -26,6 +26,7 @@ import {
   newestFirst,
   parseDecimal,
   projectName,
+  staffPriceOf,
   remainingShipQtyExcluding,
   staffName,
   todayISO,
@@ -157,7 +158,7 @@ export default function LogisticsPage() {
       staffId: a.staffId,
       workName: a.workName,
       qty: a.qty,
-      unitPrice: a.unitPrice,
+      unitPrice: staffPriceOf(data, a),
       deadline: a.deadline,
       shipDate: a.shipDate,
       notes: a.notes || "",
@@ -374,7 +375,7 @@ export default function LogisticsPage() {
                             {staffName(data, a.staffId)}
                           </td>
                           <td className="py-4 px-2">{a.qty.toLocaleString()}</td>
-                          <td className="py-4 px-2">{yen(a.unitPrice)}</td>
+                          <td className="py-4 px-2">{yen(staffPriceOf(data, a))}</td>
                           <td className="py-4 px-2 text-sm">{a.deadline}</td>
                           <td className="py-4 px-2 text-sm">{a.shipDate}</td>
                           <td className="py-4 px-2">
@@ -468,9 +469,9 @@ export default function LogisticsPage() {
                           <td className="py-4 px-2 font-bold text-teal-600">
                             {(a.arrivedQty ?? 0).toLocaleString()}
                           </td>
-                          <td className="py-4 px-2">{yen(a.unitPrice)}</td>
+                          <td className="py-4 px-2">{yen(staffPriceOf(data, a))}</td>
                           <td className="py-4 px-2 font-bold text-primary">
-                            {yen(lineAmount(a.arrivedQty ?? 0, a.unitPrice))}
+                            {yen(lineAmount(a.arrivedQty ?? 0, staffPriceOf(data, a)))}
                           </td>
                           <td className="py-4 px-2">{a.arriveDate}</td>
                           <td className="py-4 px-2 text-right">
@@ -500,7 +501,7 @@ export default function LogisticsPage() {
               </p>
               <p className="text-sm text-slate-500">
                 出荷数: {arriveTarget.qty.toLocaleString()} / 単価:{" "}
-                {yen(arriveTarget.unitPrice)}
+                {yen(staffPriceOf(data, arriveTarget))}
               </p>
               <Field label="入荷数量" required>
                 <FormInput
@@ -518,7 +519,7 @@ export default function LogisticsPage() {
                 />
               </Field>
               <p className="text-sm font-bold text-primary">
-                報酬見込み: {yen(lineAmount(arrivedQty, arriveTarget.unitPrice))}
+                報酬見込み: {yen(lineAmount(arrivedQty, staffPriceOf(data, arriveTarget)))}
               </p>
               <div className="flex justify-end gap-3 pt-2">
                 <button

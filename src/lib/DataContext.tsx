@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { AppData } from "./types";
@@ -42,6 +43,8 @@ async function fetchJson(input: string, init?: RequestInit): Promise<Response> {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<AppData>(createSeedData);
+  const dataRef = useRef(data);
+  dataRef.current = data;
   // Seed is already in memory — never block the whole app on /api/db.
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,12 +87,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const update = useCallback(
     async (updater: (prev: AppData) => AppData) => {
-      let next: AppData | null = null;
-      setData((prev) => {
-        next = updater(prev);
-        return next;
-      });
-      if (!next) return;
+      const next = updater(dataRef.current);
+      dataRef.current = next;
+      setData(next);
       const res = await fetchJson("/api/db", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

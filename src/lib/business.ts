@@ -115,6 +115,24 @@ export function projectById(data: AppData, id: string): Project | undefined {
   return data.projects.find((p) => p.id === id);
 }
 
+/** Worker price currently set on the project. Shipment rows keep an older copy. */
+export function staffPriceOf(
+  data: AppData,
+  assignment: { projectId: string; unitPrice: number }
+): number {
+  const project = projectById(data, assignment.projectId);
+  return project ? project.staffUnitPrice : assignment.unitPrice;
+}
+
+/** Customer price currently set on the project. Delivery rows keep an older copy. */
+export function customerPriceOf(
+  data: AppData,
+  delivery: { projectId: string; unitPrice: number }
+): number {
+  const project = projectById(data, delivery.projectId);
+  return project ? project.unitPrice : delivery.unitPrice;
+}
+
 export function projectName(data: AppData, projectId: string): string {
   return projectById(data, projectId)?.name ?? "(不明な案件)";
 }
@@ -205,14 +223,15 @@ export function paymentLines(
     )
     .map((a) => {
       const qty = a.arrivedQty ?? 0;
+      const unitPrice = staffPriceOf(data, a);
       return {
         assignmentId: a.id,
         staffId: a.staffId,
         projectId: a.projectId,
         workName: a.workName,
         arrivedQty: qty,
-        unitPrice: a.unitPrice,
-        amount: lineAmount(qty, a.unitPrice),
+        unitPrice,
+        amount: lineAmount(qty, unitPrice),
         arriveDate: a.arriveDate!,
         yearMonth: yearMonthOf(a.arriveDate!),
       };
@@ -269,15 +288,18 @@ export function invoiceLinesForDeliveries(
   data: AppData,
   deliveries: Delivery[]
 ): InvoiceLine[] {
-  return deliveries.map((d) => ({
-    deliveryId: d.id,
-    projectId: d.projectId,
-    projectName: projectName(data, d.projectId),
-    qty: d.qty,
-    unitPrice: d.unitPrice,
-    amount: lineAmount(d.qty, d.unitPrice),
-    deliveryDate: d.deliveryDate,
-  }));
+  return deliveries.map((d) => {
+    const unitPrice = customerPriceOf(data, d);
+    return {
+      deliveryId: d.id,
+      projectId: d.projectId,
+      projectName: projectName(data, d.projectId),
+      qty: d.qty,
+      unitPrice,
+      amount: lineAmount(d.qty, unitPrice),
+      deliveryDate: d.deliveryDate,
+    };
+  });
 }
 
 /** Tax without 四捨五入 (切り捨て). */
@@ -367,6 +389,7 @@ export function syncProjectUnitPrices(
   project: Project,
   changed: { customer: boolean; staff: boolean }
 ): AppData {
+  const projects = data.projects.map((p) => (p.id === project.id ? { ...p, ...project } : p));
   const assignments = changed.staff
     ? data.assignments.map((a) =>
         a.projectId === project.id ? { ...a, unitPrice: project.staffUnitPrice } : a
@@ -377,7 +400,7 @@ export function syncProjectUnitPrices(
         d.projectId === project.id ? { ...d, unitPrice: project.unitPrice } : d
       )
     : data.deliveries;
-  const draft: AppData = { ...data, assignments, deliveries };
+  const draft: AppData = { ...data, projects, assignments, deliveries };
   if (!changed.customer) return draft;
   const touched = new Set(
     deliveries.filter((d) => d.projectId === project.id).map((d) => d.id)
@@ -400,8 +423,10 @@ export function invoiceDetail(data: AppData, invoiceId: string) {
   // Safety check: all deliveries must match invoice.clientId
   const mixed = deliveries.filter((d) => d.clientId !== invoice.clientId);
   const lines = invoiceLinesForDeliveries(data, deliveries);
+  const subtotal = lines.reduce((s, l) => s + l.amount, 0);
+  const tax = calcTax(subtotal);
   return {
-    invoice,
+    invoice: { ...invoice, subtotal, tax, total: subtotal + tax },
     client: clientById(data, invoice.clientId),
     lines,
     mixedClientError: mixed.length > 0,
@@ -424,13 +449,16 @@ export function monthlyReport(data: AppData, yearMonth: string): MonthlyReport {
   const deliveries = data.deliveries.filter(
     (d) => yearMonthOf(d.deliveryDate) === yearMonth
   );
-  const revenue = deliveries.reduce((s, d) => s + d.qty * d.unitPrice, 0);
+  const revenue = deliveries.reduce((s, d) => s + lineAmount(d.qty, customerPriceOf(data, d)), 0);
   const payLines = paymentLines(data, { yearMonth });
   const staffCost = payLines.reduce((s, l) => s + l.amount, 0);
 
   const clientMap = new Map<string, number>();
   for (const d of deliveries) {
-    clientMap.set(d.clientId, (clientMap.get(d.clientId) ?? 0) + d.qty * d.unitPrice);
+    clientMap.set(
+      d.clientId,
+      (clientMap.get(d.clientId) ?? 0) + lineAmount(d.qty, customerPriceOf(data, d))
+    );
   }
   const staffMap = new Map<string, number>();
   for (const l of payLines) {
@@ -486,7 +514,7 @@ export function dashboardStats(data: AppData) {
   const ym = activityYearMonth(data);
   const monthlyRevenue = data.deliveries
     .filter((d) => yearMonthOf(d.deliveryDate) === ym)
-    .reduce((s, d) => s + d.qty * d.unitPrice, 0);
+    .reduce((s, d) => s + lineAmount(d.qty, customerPriceOf(data, d)), 0);
   const homeworkerCount = data.staff.filter((s) => s.status === "active").length;
   const unbilledCount = unbilledDeliveries(data).length;
   return {

@@ -6,7 +6,7 @@ import { Banner } from "@/components/ui";
 import { useFeedback } from "@/components/Feedback";
 import { useData } from "@/lib/DataContext";
 import type { PortalSession } from "@/lib/portalAuth";
-import { activityYearMonth, newestFirst, paymentLines, yen } from "@/lib/business";
+import { activityYearMonth, newestFirst, paymentLines, staffPriceOf, yen } from "@/lib/business";
 import type { Staff } from "@/lib/types";
 
 type Tab = "home" | "history" | "profile";
@@ -231,7 +231,7 @@ export default function MyPageClient({ session }: { session: PortalSession }) {
                     <li key={a.id} className="border rounded-xl p-3">
                       <p className="font-bold">{a.workName}</p>
                       <p className="text-sm text-slate-600">
-                        出荷 {a.qty.toLocaleString()} / 納期 {a.deadline} / 単価 {yen(a.unitPrice)}
+                        出荷 {a.qty.toLocaleString()} / 納期 {a.deadline} / 単価 {yen(staffPriceOf(data, a))}
                       </p>
                     </li>
                   ))}

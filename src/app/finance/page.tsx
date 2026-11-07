@@ -17,7 +17,10 @@ import { useFeedback } from "@/components/Feedback";
 import { useData } from "@/lib/DataContext";
 import {
   clientName,
+  customerPriceOf,
+  invoiceDetail,
   invoiceLinesForDeliveries,
+  lineAmount,
   newestFirst,
   issueInvoice,
   paymentLines,
@@ -261,7 +264,10 @@ export default function FinancePage() {
                   <tbody className="divide-y">
                     {newestFirst(data.clients).map((c) => {
                       const list = allUnbilled.filter((d) => d.clientId === c.id);
-                      const amount = list.reduce((s, d) => s + d.qty * d.unitPrice, 0);
+                      const amount = list.reduce(
+                        (s, d) => s + lineAmount(d.qty, customerPriceOf(data, d)),
+                        0
+                      );
                       if (list.length === 0) return null;
                       return (
                         <tr key={c.id}>
@@ -305,19 +311,21 @@ export default function FinancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {newestFirst(data.invoices).map((inv) => (
+                    {newestFirst(data.invoices).map((inv) => {
+                      const shown = invoiceDetail(data, inv.id)?.invoice ?? inv;
+                      return (
                         <tr key={inv.id}>
-                          <td className="py-3 px-2">{inv.issueDate}</td>
-                          <td className="py-3 px-2">{inv.yearMonth}</td>
+                          <td className="py-3 px-2">{shown.issueDate}</td>
+                          <td className="py-3 px-2">{shown.yearMonth}</td>
                           <td className="py-3 px-2 font-bold">
-                            {clientName(data, inv.clientId)}
+                            {clientName(data, shown.clientId)}
                           </td>
                           <td className="py-3 px-2 text-sm text-slate-500">
-                            {inv.number || "—"}
+                            {shown.number || "—"}
                           </td>
-                          <td className="py-3 px-2 text-right">{yen(inv.subtotal)}</td>
+                          <td className="py-3 px-2 text-right">{yen(shown.subtotal)}</td>
                           <td className="py-3 px-2 text-right font-bold text-primary">
-                            {yen(inv.total)}
+                            {yen(shown.total)}
                           </td>
                           <td className="py-3 px-2 text-right">
                             <Link
@@ -329,7 +337,8 @@ export default function FinancePage() {
                             </Link>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

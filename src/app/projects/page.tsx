@@ -105,9 +105,6 @@ export default function ProjectsPage() {
       setFormError("受注数量を入力してください");
       return;
     }
-    const customerChanged = editing != null && form.unitPrice !== editing.unitPrice;
-    const staffChanged = editing != null && form.staffUnitPrice !== editing.staffUnitPrice;
-    const priceChanged = customerChanged || staffChanged;
     try {
     await update((prev) => {
       if (editing) {
@@ -116,12 +113,9 @@ export default function ProjectsPage() {
           ...prev,
           projects: prev.projects.map((p) => (p.id === editing.id ? project : p)),
         };
-        return priceChanged
-          ? syncProjectUnitPrices(next, project, {
-              customer: customerChanged,
-              staff: staffChanged,
-            })
-          : next;
+        // Always copy the prices on the form. A previous save may have updated
+        // the project while leaving older prices on shipments and deliveries.
+        return syncProjectUnitPrices(next, project, { customer: true, staff: true });
       }
       const project: Project = {
         ...form,
@@ -132,11 +126,9 @@ export default function ProjectsPage() {
     });
     setOpen(false);
     toast(
-      priceChanged
-        ? "案件を更新しました。出荷・納品・請求・支払・月報の単価も、新しい金額にそろえました。"
-        : editing
-          ? "案件を更新しました"
-          : "案件を登録しました。次は内職者へ出荷してください。",
+      editing
+        ? "案件を更新しました。出荷・納品・請求・支払・月報の単価も、この画面の金額にそろえました。"
+        : "案件を登録しました。次は内職者へ出荷してください。",
       "success"
     );
     } catch {
@@ -379,7 +371,7 @@ export default function ProjectsPage() {
             </Field>
             {editing && (
               <p className="md:col-span-2 text-xs text-slate-500">
-                顧客単価や内職単価を変えて保存すると、この案件の出荷一覧・納品・請求書・支払・月報も、新しい単価にそろいます。
+                保存すると、この案件の出荷一覧・納品・請求書・支払・月報は、いま表示している顧客単価と内職単価にそろいます。単価を変えていなくても、出荷に古い単価が残っていれば上書きします。
               </p>
             )}
             <div className="md:col-span-2">

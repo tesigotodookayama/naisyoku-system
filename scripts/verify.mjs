@@ -12,6 +12,7 @@ import {
   monthlyReport,
   newestFirst,
   paymentLines,
+  staffPriceOf,
   remainingDeliverQty,
   syncProjectUnitPrices,
   remainingShipQty,
@@ -743,6 +744,34 @@ console.log("\n12. 表示順は新しいものが上");
   );
   const openProjects = newestFirst(listed.projects.filter((p) => p.status !== "closed"));
   assert(openProjects[0]?.id === "prj_seal", "出荷登録の案件候補は新しい案件が上");
+}
+
+console.log("\n13. 出荷に古い単価が残っていても案件の単価を使う");
+{
+  const stuck = createSeedData();
+  const envelope = stuck.projects.find((p) => p.id === "prj_envelope");
+  envelope.staffUnitPrice = 1.2;
+  envelope.unitPrice = 2.5;
+  const shipment = stuck.assignments.find((a) => a.id === "asn_sato_env");
+  shipment.unitPrice = 0.1;
+  const delivery = stuck.deliveries.find((d) => d.id === "dlv_sample_2");
+  delivery.unitPrice = 0.1;
+  assert(staffPriceOf(stuck, shipment) === 1.2, "出荷一覧の単価は案件の内職単価");
+  const pay = paymentLines(stuck, { staffId: "stf_sato", yearMonth: "2026-04" }).find(
+    (l) => l.assignmentId === "asn_sato_env"
+  );
+  assert(pay.unitPrice === 1.2, `支払明細の単価は1.2 (actual ${pay.unitPrice})`);
+  assert(pay.amount === 980 * 1.2, `支払金額は980×1.2 (actual ${pay.amount})`);
+  const report = monthlyReport(stuck, "2026-04");
+  // envelope delivery 2000*2.5, seal 1000*5, pack 3000*15
+  assert(report.revenue === 2000 * 2.5 + 5000 + 45000, `月報売上は案件の顧客単価 (actual ${report.revenue})`);
+  const issued = issueInvoice(stuck, "cli_sample", "2026-04");
+  assert(!("error" in issued), "古い納品単価でも請求を発行できる");
+  if (!("error" in issued)) {
+    const detail = invoiceDetail(issued.data, issued.invoice.id);
+    assert(detail.lines[0].unitPrice === 2.5, "請求明細は案件の顧客単価");
+    assert(detail.invoice.subtotal === 2000 * 2.5, `請求税抜は新しい単価 (actual ${detail.invoice.subtotal})`);
+  }
 }
 
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
