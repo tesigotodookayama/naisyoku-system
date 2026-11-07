@@ -23,6 +23,7 @@ import {
   clientName,
   deliveredQty,
   newId,
+  newestFirst,
   parseDecimal,
   projectStatusLabel,
   remainingShipQty,
@@ -55,14 +56,12 @@ export default function ProjectsPage() {
 
   const projects = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return data.projects.filter((p) => {
-      const cname = clientName(data, p.clientId).toLowerCase();
-      return (
-        !term ||
-        p.name.toLowerCase().includes(term) ||
-        cname.includes(term)
-      );
-    });
+    return newestFirst(
+      data.projects.filter((p) => {
+        const cname = clientName(data, p.clientId).toLowerCase();
+        return !term || p.name.toLowerCase().includes(term) || cname.includes(term);
+      })
+    );
   }, [data, q]);
 
   const openNew = () => {
@@ -71,7 +70,7 @@ export default function ProjectsPage() {
       return;
     }
     setEditing(null);
-    setForm(emptyProject(data.clients[0]?.id ?? ""));
+    setForm(emptyProject(newestFirst(data.clients)[0]?.id ?? ""));
     setFormError(null);
     setOpen(true);
   };
@@ -306,7 +305,7 @@ export default function ProjectsPage() {
                 onChange={(e) => setForm({ ...form, clientId: e.target.value })}
               >
                 <option value="">選択してください</option>
-                {data.clients.map((c) => (
+                {newestFirst(data.clients).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>

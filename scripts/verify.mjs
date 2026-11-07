@@ -10,6 +10,7 @@ import {
   invoiceDetail,
   issueInvoice,
   monthlyReport,
+  newestFirst,
   paymentLines,
   remainingDeliverQty,
   syncProjectUnitPrices,
@@ -715,6 +716,33 @@ console.log("\n11. 案件単価の連動");
       .every((d) => d.unitPrice === 11),
     "顧客単価だけの変更では納品単価が変わる"
   );
+}
+
+console.log("\n12. 表示順は新しいものが上");
+{
+  const listed = createSeedData();
+  const projectOrder = newestFirst(listed.projects).map((p) => p.id);
+  assert(
+    projectOrder[0] === "prj_seal" && projectOrder.at(-1) === "prj_pack",
+    `案件は登録が新しい順 (actual ${projectOrder.join(",")})`
+  );
+  const clientOrder = newestFirst(listed.clients).map((c) => c.id);
+  assert(clientOrder[0] === "cli_naishoku", `顧客は登録が新しい順 (actual ${clientOrder.join(",")})`);
+  const sameTime = [
+    { id: "a", createdAt: "2026-04-01T00:00:00.000Z" },
+    { id: "b", createdAt: "2026-04-01T00:00:00.000Z" },
+  ];
+  assert(
+    newestFirst(sameTime).map((x) => x.id).join(",") === "b,a",
+    "同じ時刻なら、あとに並んでいたものを上にする"
+  );
+  const pays = paymentLines(listed, { staffId: "stf_sato", yearMonth: "2026-04" });
+  assert(
+    pays[0]?.arriveDate >= pays.at(-1)?.arriveDate,
+    "支払明細は入荷日が新しいものを上にする"
+  );
+  const openProjects = newestFirst(listed.projects.filter((p) => p.status !== "closed"));
+  assert(openProjects[0]?.id === "prj_seal", "出荷登録の案件候補は新しい案件が上");
 }
 
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);

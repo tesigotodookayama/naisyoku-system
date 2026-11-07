@@ -18,6 +18,7 @@ import { useData } from "@/lib/DataContext";
 import {
   clientName,
   newId,
+  newestFirst,
   parseDecimal,
   remainingShipQty,
   todayISO,
@@ -73,7 +74,6 @@ export default function AssignInputPage() {
       return;
     }
     setRows((prev) => [
-      ...prev,
       {
         key: newId("tmp"),
         staffId,
@@ -81,6 +81,7 @@ export default function AssignInputPage() {
         unitPrice: effectiveUnitPrice,
         deadline: effectiveDeadline,
       },
+      ...prev,
     ]);
     setStaffId("");
     setQty(0);
@@ -106,7 +107,8 @@ export default function AssignInputPage() {
     }
     setSaving(true);
     try {
-      const assignments: Assignment[] = rows.map((r) => ({
+      const registeredAt = Date.now();
+      const assignments: Assignment[] = rows.map((r, index) => ({
         id: newId("asn"),
         projectId: project.id,
         staffId: r.staffId,
@@ -118,7 +120,7 @@ export default function AssignInputPage() {
         arrivedQty: null,
         arriveDate: null,
         notes: "",
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(registeredAt + (rows.length - 1 - index)).toISOString(),
       }));
       await update((prev) => ({
         ...prev,
@@ -186,9 +188,7 @@ export default function AssignInputPage() {
                   }}
                 >
                   <option value="">選択してください</option>
-                  {data.projects
-                    .filter((p) => p.status !== "closed")
-                    .map((p) => (
+                  {newestFirst(data.projects.filter((p) => p.status !== "closed")).map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}（{clientName(data, p.clientId)}）
                       </option>
@@ -219,7 +219,7 @@ export default function AssignInputPage() {
                     disabled={!project}
                   >
                     <option value="">選択してください</option>
-                    {activeStaff.map((s) => (
+                    {newestFirst(activeStaff).map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
                       </option>

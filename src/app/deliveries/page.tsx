@@ -21,6 +21,7 @@ import { useData } from "@/lib/DataContext";
 import {
   clientName,
   lineAmount,
+  newestFirst,
   newId,
   parseDecimal,
   projectName,
@@ -52,9 +53,8 @@ export default function DeliveriesPage() {
 
   const deliveries = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return [...data.deliveries]
-      .sort((a, b) => b.deliveryDate.localeCompare(a.deliveryDate))
-      .filter((d) => {
+    return newestFirst(
+      data.deliveries.filter((d) => {
         const text = [
           projectName(data, d.projectId),
           clientName(data, d.clientId),
@@ -62,11 +62,12 @@ export default function DeliveriesPage() {
           .join(" ")
           .toLowerCase();
         return !term || text.includes(term);
-      });
+      })
+    );
   }, [data, q]);
 
   const openNew = () => {
-    setProjectId(data.projects[0]?.id ?? "");
+    setProjectId(newestFirst(data.projects)[0]?.id ?? "");
     setDeliveryDate(todayISO());
     setFormError(null);
     setQtyTouched(false);
@@ -249,7 +250,7 @@ export default function DeliveriesPage() {
                 }}
               >
                 <option value="">選択してください</option>
-                {data.projects.map((p) => (
+                {newestFirst(data.projects).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}（{clientName(data, p.clientId)}）残
                     {remainingDeliverQty(data, p.id).toLocaleString()}

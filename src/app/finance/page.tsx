@@ -18,6 +18,7 @@ import { useData } from "@/lib/DataContext";
 import {
   clientName,
   invoiceLinesForDeliveries,
+  newestFirst,
   issueInvoice,
   paymentLines,
   staffName,
@@ -170,7 +171,7 @@ export default function FinancePage() {
                     value={selectedClientId}
                     onChange={(e) => setBillClientId(e.target.value)}
                   >
-                    {data.clients.map((c) => (
+                    {newestFirst(data.clients).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -258,7 +259,7 @@ export default function FinancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {data.clients.map((c) => {
+                    {newestFirst(data.clients).map((c) => {
                       const list = allUnbilled.filter((d) => d.clientId === c.id);
                       const amount = list.reduce((s, d) => s + d.qty * d.unitPrice, 0);
                       if (list.length === 0) return null;
@@ -304,9 +305,7 @@ export default function FinancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {[...data.invoices]
-                      .sort((a, b) => b.issueDate.localeCompare(a.issueDate))
-                      .map((inv) => (
+                    {newestFirst(data.invoices).map((inv) => (
                         <tr key={inv.id}>
                           <td className="py-3 px-2">{inv.issueDate}</td>
                           <td className="py-3 px-2">{inv.yearMonth}</td>
@@ -434,7 +433,7 @@ export default function FinancePage() {
                   value={selectedStaffId}
                   onChange={(e) => setStaffId(e.target.value)}
                 >
-                  {data.staff.map((s) => (
+                  {newestFirst(data.staff).map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>

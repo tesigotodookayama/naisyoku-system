@@ -16,7 +16,7 @@ import {
 } from "@/components/ui";
 import { useFeedback } from "@/components/Feedback";
 import { useData } from "@/lib/DataContext";
-import { newId, paymentTotal, yen, activityYearMonth } from "@/lib/business";
+import { activityYearMonth, newestFirst, newId, paymentTotal, yen } from "@/lib/business";
 import {
   validatePortalLoginId,
   validatePortalPassword,
@@ -89,13 +89,15 @@ export default function StaffPage() {
 
   const staffList = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return data.staff.filter(
-      (s) =>
-        !term ||
-        s.name.toLowerCase().includes(term) ||
-        s.skills.toLowerCase().includes(term) ||
-        s.tel.includes(term) ||
-        s.loginId.toLowerCase().includes(term)
+    return newestFirst(
+      data.staff.filter(
+        (s) =>
+          !term ||
+          s.name.toLowerCase().includes(term) ||
+          s.skills.toLowerCase().includes(term) ||
+          s.tel.includes(term) ||
+          s.loginId.toLowerCase().includes(term)
+      )
     );
   }, [data.staff, q]);
 

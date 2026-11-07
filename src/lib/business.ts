@@ -80,6 +80,21 @@ export function yearMonthOf(date: string): string {
   return date.slice(0, 7);
 }
 
+/**
+ * Newest registration first.
+ * When timestamps match, the later item in the original list stays above.
+ */
+export function newestFirst<T extends { createdAt: string }>(items: readonly T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const byTime = b.item.createdAt.localeCompare(a.item.createdAt);
+      if (byTime !== 0) return byTime;
+      return b.index - a.index;
+    })
+    .map(({ item }) => item);
+}
+
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -202,7 +217,11 @@ export function paymentLines(
         yearMonth: yearMonthOf(a.arriveDate!),
       };
     })
-    .sort((a, b) => a.arriveDate.localeCompare(b.arriveDate));
+    .sort(
+      (a, b) =>
+        b.arriveDate.localeCompare(a.arriveDate) ||
+        b.assignmentId.localeCompare(a.assignmentId)
+    );
 }
 
 export function paymentTotal(
@@ -214,8 +233,7 @@ export function paymentTotal(
 
 /** Staff payment summary for a month — one row per staff, no mixing. */
 export function staffPaymentSummary(data: AppData, yearMonth: string) {
-  return data.staff
-    .filter((s) => s.status === "active")
+  return newestFirst(data.staff.filter((s) => s.status === "active"))
     .map((s) => {
       const lines = paymentLines(data, { staffId: s.id, yearMonth });
       return {
@@ -241,7 +259,10 @@ export function unbilledDeliveries(
     .filter((d) =>
       opts?.yearMonth ? yearMonthOf(d.deliveryDate) === opts.yearMonth : true
     )
-    .sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+    .sort(
+      (a, b) =>
+        b.createdAt.localeCompare(a.createdAt) || b.deliveryDate.localeCompare(a.deliveryDate)
+    );
 }
 
 export function invoiceLinesForDeliveries(
@@ -373,7 +394,9 @@ export function syncProjectUnitPrices(
 export function invoiceDetail(data: AppData, invoiceId: string) {
   const invoice = data.invoices.find((i) => i.id === invoiceId);
   if (!invoice) return null;
-  const deliveries = data.deliveries.filter((d) => d.invoiceId === invoice.id);
+  const deliveries = newestFirst(
+    data.deliveries.filter((d) => d.invoiceId === invoice.id)
+  );
   // Safety check: all deliveries must match invoice.clientId
   const mixed = deliveries.filter((d) => d.clientId !== invoice.clientId);
   const lines = invoiceLinesForDeliveries(data, deliveries);
@@ -422,16 +445,24 @@ export function monthlyReport(data: AppData, yearMonth: string): MonthlyReport {
     deliveryCount: deliveries.length,
     arrivalCount: payLines.length,
     invoiceCount: data.invoices.filter((i) => i.yearMonth === yearMonth).length,
-    clientBreakdown: [...clientMap.entries()].map(([clientId, amount]) => ({
-      clientId,
-      name: clientName(data, clientId),
-      amount,
-    })),
-    staffBreakdown: [...staffMap.entries()].map(([staffId, amount]) => ({
-      staffId,
-      name: staffName(data, staffId),
-      amount,
-    })),
+    clientBreakdown: [...clientMap.entries()]
+      .map(([clientId, amount]) => ({
+        clientId,
+        name: clientName(data, clientId),
+        amount,
+        createdAt: clientById(data, clientId)?.createdAt ?? "",
+      }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(({ clientId, name, amount }) => ({ clientId, name, amount })),
+    staffBreakdown: [...staffMap.entries()]
+      .map(([staffId, amount]) => ({
+        staffId,
+        name: staffName(data, staffId),
+        amount,
+        createdAt: staffById(data, staffId)?.createdAt ?? "",
+      }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(({ staffId, name, amount }) => ({ staffId, name, amount })),
   };
 }
 
@@ -614,8 +645,7 @@ export const WORKFLOW_STEPS = [
 ] as const;
 
 export function recentProjects(data: AppData, limit = 5) {
-  return [...data.projects]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return newestFirst(data.projects)
     .slice(0, limit)
     .map((p) => ({
       id: p.id,

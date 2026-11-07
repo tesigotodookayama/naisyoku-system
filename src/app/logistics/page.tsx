@@ -23,6 +23,7 @@ import {
   assignmentStatus,
   clientName,
   lineAmount,
+  newestFirst,
   parseDecimal,
   projectName,
   remainingShipQtyExcluding,
@@ -68,8 +69,8 @@ export default function LogisticsPage() {
 
   const filteredAssigns = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return data.assignments
-      .filter((a) => {
+    return newestFirst(
+      data.assignments.filter((a) => {
         const text = [
           a.workName,
           staffName(data, a.staffId),
@@ -83,7 +84,7 @@ export default function LogisticsPage() {
           .toLowerCase();
         return !term || text.includes(term);
       })
-      .sort((a, b) => b.shipDate.localeCompare(a.shipDate));
+    );
   }, [data, q]);
 
   const pendingArrivals = useMemo(
@@ -571,7 +572,7 @@ export default function LogisticsPage() {
                       setEditForm({ ...editForm, staffId: e.target.value })
                     }
                   >
-                    {activeStaff.map((s) => (
+                    {newestFirst(activeStaff).map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
                       </option>

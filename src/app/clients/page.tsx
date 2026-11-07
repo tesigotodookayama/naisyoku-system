@@ -14,7 +14,7 @@ import {
 } from "@/components/ui";
 import { useFeedback } from "@/components/Feedback";
 import { useData } from "@/lib/DataContext";
-import { newId } from "@/lib/business";
+import { newestFirst, newId } from "@/lib/business";
 import type { Client } from "@/lib/types";
 
 const emptyClient = (): Omit<Client, "id" | "createdAt"> => ({
@@ -39,12 +39,14 @@ export default function ClientsPage() {
 
   const clients = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return data.clients.filter(
-      (c) =>
-        !term ||
-        c.name.toLowerCase().includes(term) ||
-        c.contactName.toLowerCase().includes(term) ||
-        c.tel.includes(term)
+    return newestFirst(
+      data.clients.filter(
+        (c) =>
+          !term ||
+          c.name.toLowerCase().includes(term) ||
+          c.contactName.toLowerCase().includes(term) ||
+          c.tel.includes(term)
+      )
     );
   }, [data.clients, q]);
 

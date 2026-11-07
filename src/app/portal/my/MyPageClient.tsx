@@ -6,7 +6,7 @@ import { Banner } from "@/components/ui";
 import { useFeedback } from "@/components/Feedback";
 import { useData } from "@/lib/DataContext";
 import type { PortalSession } from "@/lib/portalAuth";
-import { activityYearMonth, paymentLines, yen } from "@/lib/business";
+import { activityYearMonth, newestFirst, paymentLines, yen } from "@/lib/business";
 import type { Staff } from "@/lib/types";
 
 type Tab = "home" | "history" | "profile";
@@ -40,8 +40,8 @@ export default function MyPageClient({ session }: { session: PortalSession }) {
     yearMonth: activityMonth,
   }).reduce((s, l) => s + l.amount, 0);
   const grandTotal = lines.reduce((s, l) => s + l.amount, 0);
-  const pending = data.assignments.filter(
-    (a) => a.staffId === staff?.id && a.arrivedQty == null
+  const pending = newestFirst(
+    data.assignments.filter((a) => a.staffId === staff?.id && a.arrivedQty == null)
   );
 
   const saveProfile = async () => {
