@@ -317,6 +317,59 @@ export function issueInvoice(
   };
 }
 
+function deliveriesOnInvoice(data: AppData, invoice: Invoice): Delivery[] {
+  const linked = data.deliveries.filter((d) => d.invoiceId === invoice.id);
+  if (linked.length > 0) return linked;
+  const ids = new Set(invoice.deliveryIds);
+  return data.deliveries.filter((d) => ids.has(d.id));
+}
+
+/** Recompute a stored invoice from its delivery lines. Tax stays 切り捨て. */
+export function recalculateInvoice(data: AppData, invoice: Invoice): Invoice {
+  const lines = invoiceLinesForDeliveries(data, deliveriesOnInvoice(data, invoice));
+  const subtotal = lines.reduce((s, l) => s + l.amount, 0);
+  const tax = calcTax(subtotal);
+  const total = subtotal + tax;
+  if (invoice.subtotal === subtotal && invoice.tax === tax && invoice.total === total) {
+    return invoice;
+  }
+  return { ...invoice, subtotal, tax, total };
+}
+
+/**
+ * Copy the project's current prices onto existing rows.
+ * Worker price updates every shipment for the project (payments and reports follow).
+ * Customer price updates every delivery, then invoices that include those deliveries.
+ */
+export function syncProjectUnitPrices(
+  data: AppData,
+  project: Project,
+  changed: { customer: boolean; staff: boolean }
+): AppData {
+  const assignments = changed.staff
+    ? data.assignments.map((a) =>
+        a.projectId === project.id ? { ...a, unitPrice: project.staffUnitPrice } : a
+      )
+    : data.assignments;
+  const deliveries = changed.customer
+    ? data.deliveries.map((d) =>
+        d.projectId === project.id ? { ...d, unitPrice: project.unitPrice } : d
+      )
+    : data.deliveries;
+  const draft: AppData = { ...data, assignments, deliveries };
+  if (!changed.customer) return draft;
+  const touched = new Set(
+    deliveries.filter((d) => d.projectId === project.id).map((d) => d.id)
+  );
+  const invoices = data.invoices.map((invoice) => {
+    const affected =
+      invoice.deliveryIds.some((id) => touched.has(id)) ||
+      deliveries.some((d) => d.invoiceId === invoice.id && touched.has(d.id));
+    return affected ? recalculateInvoice(draft, invoice) : invoice;
+  });
+  return { ...draft, invoices };
+}
+
 export function invoiceDetail(data: AppData, invoiceId: string) {
   const invoice = data.invoices.find((i) => i.id === invoiceId);
   if (!invoice) return null;

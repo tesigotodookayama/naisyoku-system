@@ -9,8 +9,10 @@ import { createSeedData } from "../src/lib/seed.ts";
 import {
   invoiceDetail,
   issueInvoice,
+  monthlyReport,
   paymentLines,
   remainingDeliverQty,
+  syncProjectUnitPrices,
   remainingShipQty,
   staffPaymentSummary,
   unbilledDeliveries,
@@ -622,6 +624,98 @@ assert(
   })) === "allow",
   "robots.txt は鍵がなくても返す"
 );
+
+console.log("\n11. 案件単価の連動");
+{
+  const base = createSeedData();
+  const issuedA = issueInvoice(base, "cli_sample", "2026-04");
+  const issuedB = issueInvoice(issuedA.data, "cli_test", "2026-04");
+  assert(!("error" in issuedA) && !("error" in issuedB), "連動テスト用の請求書を発行できる");
+  const before = issuedB.data;
+  const envelope = before.projects.find((p) => p.id === "prj_envelope");
+  const updated = syncProjectUnitPrices(
+    before,
+    {
+      ...envelope,
+      unitPrice: 12,
+      staffUnitPrice: 7,
+    },
+    { customer: true, staff: true }
+  );
+  assert(
+    updated.assignments
+      .filter((a) => a.projectId === "prj_envelope")
+      .every((a) => a.unitPrice === 7),
+    "封筒案件の出荷単価は新しい内職単価になる"
+  );
+  assert(
+    updated.assignments.find((a) => a.id === "asn_tanaka_env").unitPrice === 7,
+    "未入荷の出荷も新しい内職単価になる"
+  );
+  assert(
+    updated.assignments
+      .filter((a) => a.projectId !== "prj_envelope")
+      .every((a) => a.unitPrice === before.assignments.find((b) => b.id === a.id).unitPrice),
+    "ほかの案件の出荷単価はそのまま"
+  );
+  assert(
+    updated.deliveries
+      .filter((d) => d.projectId === "prj_envelope")
+      .every((d) => d.unitPrice === 12),
+    "封筒案件の納品単価は新しい顧客単価になる"
+  );
+  assert(
+    updated.deliveries.find((d) => d.id === "dlv_test_1").unitPrice === 5,
+    "ほかの案件の納品単価はそのまま"
+  );
+  const satoPay = paymentLines(updated, { staffId: "stf_sato", yearMonth: "2026-04" });
+  const satoAmount = satoPay.reduce((s, l) => s + l.amount, 0);
+  // envelope 980*7=6860, seal 500*3=1500
+  assert(satoAmount === 8360, `支払は新しい内職単価 (actual ${satoAmount})`);
+  const report = monthlyReport(updated, "2026-04");
+  // deliveries: envelope 2000*12, seal 1000*5, pack 3000*15
+  assert(report.revenue === 74000, `月報の売上は新しい顧客単価 (actual ${report.revenue})`);
+  // staff: 980*7 + 700*9 + 2000*3 + 500*3 = 20660
+  assert(report.staffCost === 20660, `月報の報酬は新しい内職単価 (actual ${report.staffCost})`);
+  const invoiceA = updated.invoices.find((i) => i.clientId === "cli_sample");
+  assert(invoiceA.subtotal === 24000, `発行済み請求の税抜が追従 (actual ${invoiceA.subtotal})`);
+  assert(invoiceA.tax === 2400, `発行済み請求の消費税が追従 (actual ${invoiceA.tax})`);
+  assert(invoiceA.total === 26400, `発行済み請求の税込が追従 (actual ${invoiceA.total})`);
+  const detailA = invoiceDetail(updated, invoiceA.id);
+  assert(
+    detailA.lines.every((l) => l.unitPrice === 12) &&
+      detailA.lines.reduce((s, l) => s + l.amount, 0) === invoiceA.subtotal,
+    "請求明細の単価と合計が一致する"
+  );
+  const invoiceB = updated.invoices.find((i) => i.clientId === "cli_test");
+  const invoiceBBefore = before.invoices.find((i) => i.clientId === "cli_test");
+  assert(
+    invoiceB.subtotal === invoiceBBefore.subtotal && invoiceB.total === invoiceBBefore.total,
+    "関係ない請求書の金額はそのまま"
+  );
+
+  const custom = {
+    ...before,
+    assignments: before.assignments.map((a) =>
+      a.id === "asn_sato_env" ? { ...a, unitPrice: 99 } : a
+    ),
+  };
+  const onlyCustomer = syncProjectUnitPrices(
+    custom,
+    { ...envelope, unitPrice: 11 },
+    { customer: true, staff: false }
+  );
+  assert(
+    onlyCustomer.assignments.find((a) => a.id === "asn_sato_env").unitPrice === 99,
+    "顧客単価だけの変更では出荷単価を変えない"
+  );
+  assert(
+    onlyCustomer.deliveries
+      .filter((d) => d.projectId === "prj_envelope")
+      .every((d) => d.unitPrice === 11),
+    "顧客単価だけの変更では納品単価が変わる"
+  );
+}
 
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

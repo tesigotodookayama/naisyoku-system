@@ -27,6 +27,7 @@ import {
   projectStatusLabel,
   remainingShipQty,
   shippedQty,
+  syncProjectUnitPrices,
   yen,
 } from "@/lib/business";
 import type { Project, ProjectStatus } from "@/lib/types";
@@ -105,15 +106,23 @@ export default function ProjectsPage() {
       setFormError("受注数量を入力してください");
       return;
     }
+    const customerChanged = editing != null && form.unitPrice !== editing.unitPrice;
+    const staffChanged = editing != null && form.staffUnitPrice !== editing.staffUnitPrice;
+    const priceChanged = customerChanged || staffChanged;
     try {
     await update((prev) => {
       if (editing) {
-        return {
+        const project: Project = { ...editing, ...form };
+        const next = {
           ...prev,
-          projects: prev.projects.map((p) =>
-            p.id === editing.id ? { ...p, ...form } : p
-          ),
+          projects: prev.projects.map((p) => (p.id === editing.id ? project : p)),
         };
+        return priceChanged
+          ? syncProjectUnitPrices(next, project, {
+              customer: customerChanged,
+              staff: staffChanged,
+            })
+          : next;
       }
       const project: Project = {
         ...form,
@@ -123,7 +132,14 @@ export default function ProjectsPage() {
       return { ...prev, projects: [...prev.projects, project] };
     });
     setOpen(false);
-    toast(editing ? "案件を更新しました" : "案件を登録しました。次は内職者へ出荷してください。", "success");
+    toast(
+      priceChanged
+        ? "案件を更新しました。出荷・納品・請求・支払・月報の単価も、新しい金額にそろえました。"
+        : editing
+          ? "案件を更新しました"
+          : "案件を登録しました。次は内職者へ出荷してください。",
+      "success"
+    );
     } catch {
       setFormError("保存に失敗しました");
       toast("保存に失敗しました", "error");
@@ -362,6 +378,11 @@ export default function ProjectsPage() {
                 placeholder="例: 0.3"
               />
             </Field>
+            {editing && (
+              <p className="md:col-span-2 text-xs text-slate-500">
+                顧客単価や内職単価を変えて保存すると、この案件の出荷一覧・納品・請求書・支払・月報も、新しい単価にそろいます。
+              </p>
+            )}
             <div className="md:col-span-2">
               <Field label="作業内容・詳細">
                 <FormTextarea
