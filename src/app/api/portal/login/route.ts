@@ -1,35 +1,82 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readDb } from "@/lib/db";
-import { checkPortalPassword } from "@/lib/portalPasswords";
+import { continueAfterLoginHtml } from "@/lib/loginContinueHtml";
+import { loginIdsMatch, normalizeLoginId, trimPassword } from "@/lib/loginNormalize";
 import { PORTAL_COOKIE } from "@/lib/portalAuth";
+import { checkPortalPassword } from "@/lib/portalPasswords";
+import { sessionCookieOptions, wantsJsonRequest } from "@/lib/sessionCookie";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type FailCode = "1" | "unset" | "changed";
 
 function cookieValue(staffId: string, loginId: string) {
   return `${staffId}|${loginId}`;
 }
 
-function success(staffId: string, loginId: string) {
-  const res = new NextResponse(null, {
-    status: 303,
-    headers: { Location: "/portal/my" },
-  });
-  res.cookies.set(PORTAL_COOKIE, cookieValue(staffId, loginId), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 8,
-    path: "/",
-  });
-  return res;
+function withSession(response: NextResponse, staffId: string, loginId: string) {
+  response.cookies.set(PORTAL_COOKIE, cookieValue(staffId, loginId), sessionCookieOptions());
+  return response;
 }
 
-function fail(code: "1" | "unset" | "changed" = "1") {
+function success(staffId: string, loginId: string, asJson: boolean) {
+  if (asJson) {
+    return withSession(
+      NextResponse.json(
+        { ok: true },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      ),
+      staffId,
+      loginId
+    );
+  }
+  return withSession(
+    new NextResponse(continueAfterLoginHtml("/portal/my", "マイページへ進む"), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    }),
+    staffId,
+    loginId
+  );
+}
+
+function fail(asJson: boolean, code: FailCode = "1") {
+  if (asJson) {
+    return NextResponse.json(
+      { ok: false, error: code },
+      { status: 401, headers: { "Cache-Control": "no-store" } }
+    );
+  }
   return new NextResponse(null, {
     status: 303,
     headers: { Location: `/portal/login?error=${code}` },
   });
+}
+
+async function readCredentials(request: NextRequest): Promise<{
+  id: string;
+  password: string;
+}> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = (await request.json().catch(() => null)) as {
+      id?: unknown;
+      password?: unknown;
+    } | null;
+    return {
+      id: String(body?.id ?? ""),
+      password: String(body?.password ?? ""),
+    };
+  }
+  const form = await request.formData();
+  return {
+    id: String(form.get("id") ?? ""),
+    password: String(form.get("password") ?? ""),
+  };
 }
 
 /** GET does not sign anyone in. The worker types an ID and password. */
@@ -41,16 +88,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const form = await request.formData();
-  const id = String(form.get("id") ?? "").trim();
-  const password = String(form.get("password") ?? "");
+  const asJson = wantsJsonRequest(request.headers);
+  const raw = await readCredentials(request);
+  const id = normalizeLoginId(raw.id);
+  const password = trimPassword(raw.password);
   const data = await readDb();
-  const staff = data.staff.find(
-    (item) => item.loginId.trim().toLowerCase() === id.toLowerCase()
-  );
-  if (!staff) return fail();
+  const staff = data.staff.find((item) => loginIdsMatch(item.loginId, id));
+  if (!staff) return fail(asJson);
   const state = await checkPortalPassword(staff.id, password);
-  if (state === "unset") return fail("unset");
-  if (state !== "ok") return fail();
-  return success(staff.id, staff.loginId);
+  if (state === "unset") return fail(asJson, "unset");
+  if (state !== "ok") return fail(asJson);
+  return success(staff.id, staff.loginId, asJson);
 }
