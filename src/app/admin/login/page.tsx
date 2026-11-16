@@ -56,6 +56,9 @@ export default async function AdminLoginPage({
                 type="text"
                 required
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 defaultValue=""
                 placeholder="IDを入力"
                 className="w-full min-h-12 py-4 px-5 rounded-2xl font-bold bg-slate-50 border-2 border-primary-light text-lg"

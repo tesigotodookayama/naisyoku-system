@@ -774,5 +774,134 @@ console.log("\n13. 出荷に古い単価が残っていても案件の単価を�
   }
 }
 
+console.log("\n14. マイページログイン（全角IDとセッションクッキー）");
+{
+  const {
+    normalizeLoginId,
+    loginIdsMatch,
+    trimPassword,
+  } = await import("../src/lib/loginNormalize.ts");
+  const {
+    PORTAL_COOKIE,
+    parsePortalCookie,
+  } = await import("../src/lib/portalAuth.ts");
+  const {
+    SESSION_MAX_AGE_SECONDS,
+    sessionCookieOptions,
+    wantsJsonRequest,
+  } = await import("../src/lib/sessionCookie.ts");
+  const { continueAfterLoginHtml } = await import("../src/lib/loginContinueHtml.ts");
+
+  assert(normalizeLoginId("  sato001  ") === "sato001", "ログインIDの前後空白を除く");
+  assert(normalizeLoginId("sato001\n") === "sato001", "ログインID末尾の改行を除く");
+  assert(normalizeLoginId("ｓａｔｏ００１") === "sato001", "全角のログインIDを半角にする");
+  assert(normalizeLoginId("ＳＡＴＯ００１") === "SATO001", "全角英字は半角にし、大文字はそのまま");
+  assert(loginIdsMatch("sato001", "  SATO001\n"), "ログインIDは大文字小文字を区別しない");
+  assert(loginIdsMatch("sato001", "ｓａｔｏ００１"), "全角のログインIDは登録済みIDと一致する");
+  assert(!loginIdsMatch("sato001", "sato002"), "違うログインIDは一致しない");
+  assert(trimPassword("  secret  ") === "secret", "パスワードの前後空白を除く");
+  assert(
+    trimPassword("ｓｅｃｒｅｔ") === "ｓｅｃｒｅｔ",
+    "パスワードは全角のまま残す（NFKCしない）"
+  );
+
+  assert(PORTAL_COOKIE === "portal_session", "マイページのクッキー名");
+  assert(
+    parsePortalCookie("stf_sato|sato001")?.staffId === "stf_sato" &&
+      parsePortalCookie("stf_sato|sato001")?.loginId === "sato001",
+    "クッキー値 staffId|loginId を読む"
+  );
+  assert(
+    parsePortalCookie("stf_sato%7Csato001")?.loginId === "sato001",
+    "URLエンコードされたクッキー値を読む"
+  );
+  assert(parsePortalCookie("") == null, "空のクッキーは無効");
+  assert(parsePortalCookie("only-one") == null, "区切りの無いクッキーは無効");
+  assert(parsePortalCookie("a|b|c") == null, "区切りが多すぎるクッキーは無効");
+  assert(parsePortalCookie(null) == null, "無いクッキーは無効");
+
+  const cookieNow = 1_700_000_000_000;
+  const cookieOpts = sessionCookieOptions(cookieNow, "production");
+  assert(cookieOpts.httpOnly === true, "セッションクッキーは httpOnly");
+  assert(cookieOpts.sameSite === "lax", "セッションクッキーは SameSite=Lax");
+  assert(cookieOpts.path === "/", "セッションクッキーの path は /");
+  assert(cookieOpts.secure === true, "本番のセッションクッキーは Secure");
+  assert(
+    cookieOpts.maxAge === SESSION_MAX_AGE_SECONDS && SESSION_MAX_AGE_SECONDS === 60 * 60 * 8,
+    "セッションは8時間"
+  );
+  assert(
+    cookieOpts.expires.getTime() === cookieNow + SESSION_MAX_AGE_SECONDS * 1000,
+    "expires も maxAge と同じ期限"
+  );
+  assert(
+    sessionCookieOptions(cookieNow, "development").secure === false,
+    "開発中のセッションクッキーは Secure にしない"
+  );
+
+  const jsonHeaders = {
+    get(name) {
+      if (name === "accept") return "application/json";
+      if (name === "content-type") return "multipart/form-data";
+      return null;
+    },
+  };
+  assert(wantsJsonRequest(jsonHeaders), "Accept: application/json なら JSON で返す");
+  const formHeaders = {
+    get(name) {
+      if (name === "accept") return "text/html,application/xhtml+xml";
+      if (name === "content-type") return "application/x-www-form-urlencoded";
+      return null;
+    },
+  };
+  assert(!wantsJsonRequest(formHeaders), "普通のフォームPOSTは HTML で返す");
+  const jsonBodyHeaders = {
+    get(name) {
+      if (name === "accept") return "*/*";
+      if (name === "content-type") return "application/json";
+      return null;
+    },
+  };
+  assert(wantsJsonRequest(jsonBodyHeaders), "Content-Type JSON なら JSON で返す");
+
+  const bounce = continueAfterLoginHtml("/portal/my", "マイページへ進む");
+  assert(bounce.includes('href="/portal/my"'), "200 HTML にマイページへのリンクがある");
+  assert(bounce.includes("マイページへ進む"), "200 HTML のリンク文言");
+  assert(
+    bounce.includes('<meta http-equiv="refresh" content="0;url=/portal/my">'),
+    "200 HTML に meta refresh がある"
+  );
+  assert(bounce.includes('location.replace("/portal/my")'), "200 HTML が JS でマイページへ進む");
+  const rejected = continueAfterLoginHtml("javascript:alert(1)", "x");
+  assert(rejected.includes('href="/"') && !rejected.includes("javascript:"), "外部URLは使わない");
+
+  const portalLoginSource = readFileSync(
+    new URL("../src/app/api/portal/login/route.ts", import.meta.url),
+    "utf8"
+  );
+  const adminLoginSource = readFileSync(
+    new URL("../src/app/api/admin/login/route.ts", import.meta.url),
+    "utf8"
+  );
+  const proxySource = readFileSync(new URL("../src/proxy.ts", import.meta.url), "utf8");
+  assert(
+    !portalLoginSource.includes('Location: "/portal/my"'),
+    "マイページログイン成功は 303 Location に頼らない"
+  );
+  assert(
+    portalLoginSource.includes("continueAfterLoginHtml") && portalLoginSource.includes("{ ok: true }"),
+    "マイページログイン成功は 200 JSON または 200 HTML"
+  );
+  assert(
+    !adminLoginSource.includes("Location: redirectTo"),
+    "管理者のフォーム成功は 303 Location に頼らない"
+  );
+  assert(
+    adminLoginSource.includes("continueAfterLoginHtml") && adminLoginSource.includes("{ ok: true }"),
+    "管理者ログイン成功は 200 JSON または 200 HTML"
+  );
+  assert(proxySource.includes("PORTAL_ACCESS_KEY"), "ポータルの秘密のアドレスは外さない");
+}
+
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);
