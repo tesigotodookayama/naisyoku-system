@@ -1,3 +1,5 @@
+import { loginApiAction } from "@/lib/accessGate";
+
 function safeRedirect(raw: string | undefined): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
   if (raw.startsWith("/admin/login") || raw.startsWith("/api")) return "/";
@@ -7,7 +9,7 @@ function safeRedirect(raw: string | undefined): string {
 export default async function AdminLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string; error?: string }>;
+  searchParams: Promise<{ redirect?: string; error?: string; key?: string }>;
 }) {
   const sp = await searchParams;
   const redirectTo = safeRedirect(sp.redirect);
@@ -44,7 +46,7 @@ export default async function AdminLoginPage({
             </div>
           )}
 
-          <form method="POST" action="/api/admin/login" className="space-y-6">
+          <form method="POST" action={loginApiAction("admin", sp.key)} className="space-y-6">
             <input type="hidden" name="redirect" value={redirectTo} />
             <div className="space-y-2">
               <label htmlFor="admin-id" className="text-slate-900 font-black text-sm ml-1">

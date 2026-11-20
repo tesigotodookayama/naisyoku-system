@@ -62,9 +62,15 @@ async function readCredentials(request: NextRequest): Promise<{
   };
 }
 
-function failForm(redirectTo: string) {
+function accessKeyFrom(request: NextRequest): string {
+  return request.nextUrl.searchParams.get("key")?.trim() ?? "";
+}
+
+function failForm(redirectTo: string, accessKey?: string | null) {
   const failQs = new URLSearchParams({ error: "1" });
   if (redirectTo !== "/") failQs.set("redirect", redirectTo);
+  const key = accessKey?.trim() ?? "";
+  if (key) failQs.set("key", key);
   return new NextResponse(null, {
     status: 303,
     headers: { Location: `/admin/login?${failQs.toString()}` },
@@ -74,14 +80,19 @@ function failForm(redirectTo: string) {
 /** GET does not sign anyone in. The admin types an ID and password. */
 export async function GET(request: NextRequest) {
   const redirectTo = safePath(request.nextUrl.searchParams.get("redirect"));
-  const qs = redirectTo !== "/" ? `?redirect=${encodeURIComponent(redirectTo)}` : "";
+  const qs = new URLSearchParams();
+  if (redirectTo !== "/") qs.set("redirect", redirectTo);
+  const key = accessKeyFrom(request);
+  if (key) qs.set("key", key);
+  const suffix = qs.size ? `?${qs.toString()}` : "";
   return new NextResponse(null, {
     status: 303,
-    headers: { Location: `/admin/login${qs}` },
+    headers: { Location: `/admin/login${suffix}` },
   });
 }
 
 export async function POST(request: NextRequest) {
+  const accessKey = accessKeyFrom(request);
   const { id, password, redirectTo, asJson } = await readCredentials(request);
   const typedId = normalizeLoginId(id);
   const typedPassword = trimPassword(password);
@@ -94,7 +105,7 @@ export async function POST(request: NextRequest) {
     if (asJson) {
       return NextResponse.json({ ok: false, message }, { status: 503 });
     }
-    return failForm(redirectTo);
+    return failForm(redirectTo, accessKey);
   }
   const passwordOk =
     typedId === normalizeLoginId(ADMIN_ID) &&
@@ -123,5 +134,5 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return failForm(redirectTo);
+  return failForm(redirectTo, accessKey);
 }
