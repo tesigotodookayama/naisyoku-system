@@ -44,17 +44,24 @@ function success(staffId: string, loginId: string, asJson: boolean) {
   );
 }
 
-function fail(asJson: boolean, code: FailCode = "1") {
+function fail(asJson: boolean, code: FailCode = "1", accessKey?: string | null) {
   if (asJson) {
     return NextResponse.json(
       { ok: false, error: code },
       { status: 401, headers: { "Cache-Control": "no-store" } }
     );
   }
+  const qs = new URLSearchParams({ error: code });
+  const key = accessKey?.trim() ?? "";
+  if (key) qs.set("key", key);
   return new NextResponse(null, {
     status: 303,
-    headers: { Location: `/portal/login?error=${code}` },
+    headers: { Location: `/portal/login?${qs.toString()}` },
   });
+}
+
+function accessKeyFrom(request: NextRequest): string {
+  return request.nextUrl.searchParams.get("key")?.trim() ?? "";
 }
 
 async function readCredentials(request: NextRequest): Promise<{
@@ -80,23 +87,28 @@ async function readCredentials(request: NextRequest): Promise<{
 }
 
 /** GET does not sign anyone in. The worker types an ID and password. */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const qs = new URLSearchParams();
+  const key = accessKeyFrom(request);
+  if (key) qs.set("key", key);
+  const suffix = qs.size ? `?${qs.toString()}` : "";
   return new NextResponse(null, {
     status: 303,
-    headers: { Location: "/portal/login" },
+    headers: { Location: `/portal/login${suffix}` },
   });
 }
 
 export async function POST(request: NextRequest) {
   const asJson = wantsJsonRequest(request.headers);
+  const accessKey = accessKeyFrom(request);
   const raw = await readCredentials(request);
   const id = normalizeLoginId(raw.id);
   const password = trimPassword(raw.password);
   const data = await readDb();
   const staff = data.staff.find((item) => loginIdsMatch(item.loginId, id));
-  if (!staff) return fail(asJson);
+  if (!staff) return fail(asJson, "1", accessKey);
   const state = await checkPortalPassword(staff.id, password);
-  if (state === "unset") return fail(asJson, "unset");
-  if (state !== "ok") return fail(asJson);
+  if (state === "unset") return fail(asJson, "unset", accessKey);
+  if (state !== "ok") return fail(asJson, "1", accessKey);
   return success(staff.id, staff.loginId, asJson);
 }

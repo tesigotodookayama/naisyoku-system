@@ -461,7 +461,9 @@ const {
   accessCookieValue,
   cookieMatches,
   decideAccess,
+  entryArea,
   entryUrl,
+  loginApiAction,
   accessWarning,
   isPublicAsset,
   isPortalPath,
@@ -482,7 +484,13 @@ assert(!(await cookieMatches(token, "portal-secret")), "別の鍵のクッキー
 assert(isPublicAsset("/robots.txt"), "robots.txt は公開");
 assert(isPublicAsset("/_next/static/chunk.js"), "静的ファイルは公開");
 assert(isPortalPath("/portal/login"), "マイページのログインは内職者側");
+assert(isPortalPath("/api/portal/login"), "マイページのログインAPIは内職者側");
 assert(!isPortalPath("/admin/login"), "管理者ログインは内職者側ではない");
+assert(entryArea("/portal/login") === "portal", "マイページログインは入口");
+assert(entryArea("/api/portal/login") === "portal", "マイページログインAPIは入口");
+assert(entryArea("/admin/login") === "admin", "管理者ログインは入口");
+assert(entryArea("/api/admin/login") === "admin", "管理者ログインAPIは入口");
+assert(entryArea("/portal/my") == null, "マイページ本体は鍵の入口ではない");
 assert(
   entryUrl("https://example.com", "admin", "a b") === "https://example.com/admin/login?key=a%20b",
   "管理者の入口URL"
@@ -490,6 +498,15 @@ assert(
 assert(
   entryUrl("https://example.com", "portal", "p") === "https://example.com/portal/login?key=p",
   "マイページの入口URL"
+);
+assert(loginApiAction("portal", null) === "/api/portal/login", "鍵が無いログインPOST先");
+assert(
+  loginApiAction("portal", "a b") === "/api/portal/login?key=a%20b",
+  "マイページのログインPOSTに鍵を付ける"
+);
+assert(
+  loginApiAction("admin", "x") === "/api/admin/login?key=x",
+  "管理者のログインPOSTに鍵を付ける"
 );
 assert(accessWarning("development", null, null) == null, "開発中は注意を出さない");
 assert(accessWarning("production", "a", "p") == null, "両方設定済みなら注意は無い");
@@ -528,6 +545,28 @@ assert(
   })) === "deny",
   "違う鍵ではマイページを見せない"
 );
+assert(
+  (await decideAccess({
+    pathname: "/portal/login",
+    keyParam: null,
+    adminKey: null,
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: null,
+  })) === "deny",
+  "マイページの鍵があるとき、クッキー無しのログイン画面は見せない"
+);
+assert(
+  (await decideAccess({
+    pathname: "/api/portal/login",
+    keyParam: "wrong",
+    adminKey: null,
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: null,
+  })) === "deny",
+  "違う鍵ではマイページのログインAPIも拒否"
+);
 const granted = await decideAccess({
   pathname: "/admin/login",
   keyParam: "admin-secret",
@@ -537,6 +576,33 @@ const granted = await decideAccess({
   portalCookie: null,
 });
 assert(granted.grant === "admin", "正しい鍵で管理者のクッキーを出す");
+const portalGranted = await decideAccess({
+  pathname: "/portal/login",
+  keyParam: "portal-secret",
+  adminKey: "admin-secret",
+  portalKey: "portal-secret",
+  adminCookie: null,
+  portalCookie: null,
+});
+assert(portalGranted.grant === "portal", "正しい鍵でマイページのクッキーを出す");
+const portalApiGranted = await decideAccess({
+  pathname: "/api/portal/login",
+  keyParam: "portal-secret",
+  adminKey: "admin-secret",
+  portalKey: "portal-secret",
+  adminCookie: null,
+  portalCookie: null,
+});
+assert(portalApiGranted.grant === "portal", "正しい鍵でマイページのログインAPIも通す");
+const adminApiGranted = await decideAccess({
+  pathname: "/api/admin/login",
+  keyParam: "admin-secret",
+  adminKey: "admin-secret",
+  portalKey: "portal-secret",
+  adminCookie: null,
+  portalCookie: null,
+});
+assert(adminApiGranted.grant === "admin", "正しい鍵で管理者のログインAPIも通す");
 assert(
   (await decideAccess({
     pathname: "/admin/login",
@@ -592,6 +658,28 @@ assert(
     portalCookie: portalToken,
   })) === "allow",
   "マイページのクッキーでマイページを開ける"
+);
+assert(
+  (await decideAccess({
+    pathname: "/api/portal/login",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: portalToken,
+  })) === "allow",
+  "マイページのクッキーでログインAPIを開ける"
+);
+assert(
+  (await decideAccess({
+    pathname: "/portal/login",
+    keyParam: null,
+    adminKey: "admin-secret",
+    portalKey: "portal-secret",
+    adminCookie: null,
+    portalCookie: portalToken,
+  })) === "allow",
+  "マイページのクッキーでログイン画面を開ける"
 );
 assert(
   (await decideAccess({
@@ -884,6 +972,14 @@ console.log("\n14. マイページログイン（全角IDとセッションク�
     "utf8"
   );
   const proxySource = readFileSync(new URL("../src/proxy.ts", import.meta.url), "utf8");
+  const portalFormSource = readFileSync(
+    new URL("../src/app/portal/login/LoginForm.tsx", import.meta.url),
+    "utf8"
+  );
+  const adminFormSource = readFileSync(
+    new URL("../src/app/admin/login/page.tsx", import.meta.url),
+    "utf8"
+  );
   assert(
     !portalLoginSource.includes('Location: "/portal/my"'),
     "マイページログイン成功は 303 Location に頼らない"
@@ -901,6 +997,23 @@ console.log("\n14. マイページログイン（全角IDとセッションク�
     "管理者ログイン成功は 200 JSON または 200 HTML"
   );
   assert(proxySource.includes("PORTAL_ACCESS_KEY"), "ポータルの秘密のアドレスは外さない");
+  assert(
+    !proxySource.includes("NextResponse.redirect(clean)"),
+    "正しい鍵ではリダイレクトしない（Safariが Set-Cookie を落とす）"
+  );
+  assert(
+    proxySource.includes("NextResponse.next()") &&
+      proxySource.includes("response.cookies.set") &&
+      proxySource.includes("ACCESS_COOKIE_MAX_AGE"),
+    "正しい鍵は 200 のままクッキーを付ける"
+  );
+  assert(!portalFormSource.includes("preventDefault"), "マイページログインは preventDefault しない");
+  assert(!portalFormSource.includes("fetch("), "マイページログインは fetch に頼らない");
+  assert(portalFormSource.includes('method="POST"'), "マイページログインは普通のフォームPOST");
+  assert(portalFormSource.includes("autoCapitalize=\"none\""), "マイページIDは自動大文字にしない");
+  assert(!adminFormSource.includes("preventDefault"), "管理者ログインは preventDefault しない");
+  assert(!adminFormSource.includes("fetch("), "管理者ログインは fetch に頼らない");
+  assert(adminFormSource.includes("loginApiAction(\"admin\""), "管理者ログインPOSTにも鍵を付ける");
 }
 
 console.log(`\n=== 結果: ${passed} passed, ${failed} failed ===\n`);

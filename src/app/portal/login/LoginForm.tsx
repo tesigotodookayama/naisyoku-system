@@ -12,39 +12,15 @@ function messageForError(code: string | undefined): string | null {
   return null;
 }
 
-export default function PortalLoginForm({ initialError }: { initialError?: string }) {
-  const [error, setError] = useState<string | null>(messageForError(initialError));
+export default function PortalLoginForm({
+  initialError,
+  action,
+}: {
+  initialError?: string;
+  action: string;
+}) {
+  const error = messageForError(initialError);
   const [busy, setBusy] = useState(false);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/portal/login", {
-        method: "POST",
-        body: new FormData(event.currentTarget),
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      });
-      const json = (await res.json().catch(() => null)) as {
-        ok?: boolean;
-        error?: string;
-      } | null;
-      const htmlOk =
-        res.ok && (res.headers.get("content-type") ?? "").includes("text/html");
-      if (res.ok && (json?.ok || htmlOk)) {
-        location.replace("/portal/my");
-        return;
-      }
-      const message = messageForError(json?.error) ?? WRONG_PASSWORD;
-      setError(message);
-    } catch {
-      location.replace("/portal/login?error=1");
-      return;
-    }
-    setBusy(false);
-  }
 
   return (
     <>
@@ -56,9 +32,9 @@ export default function PortalLoginForm({ initialError }: { initialError?: strin
 
       <form
         method="POST"
-        action="/api/portal/login"
+        action={action}
         className="space-y-5"
-        onSubmit={(event) => void handleSubmit(event)}
+        onSubmit={() => setBusy(true)}
       >
         <div className="space-y-2">
           <label className="font-bold block text-slate-800" htmlFor="portal-id">
@@ -91,7 +67,7 @@ export default function PortalLoginForm({ initialError }: { initialError?: strin
             className="w-full min-h-12 py-3 px-4 text-lg rounded-xl border-2"
           />
         </div>
-        <button type="submit" className="btn btn-primary w-full py-4 text-lg" disabled={busy}>
+        <button type="submit" className="btn btn-primary w-full py-4 text-lg">
           {busy ? "確認中…" : "ログインする"}
         </button>
       </form>

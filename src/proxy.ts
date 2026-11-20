@@ -3,6 +3,9 @@
  * Secret entry cookies gate the admin site and the worker portal separately.
  * When a key is not configured, that area stays open.
  * Admin pages still require the admin session after the gate.
+ *
+ * A valid ?key= must Set-Cookie on a 200 (next/rewrite), never on a redirect.
+ * Safari / ITP often drops Set-Cookie on 302/307 bounce redirects.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -39,9 +42,9 @@ export async function proxy(request: NextRequest) {
 
   if (typeof decision === "object") {
     const secret = decision.grant === "admin" ? adminKey : portalKey;
-    const clean = request.nextUrl.clone();
-    clean.searchParams.delete("key");
-    const response = NextResponse.redirect(clean);
+    // Stay on this request: 200 document (or the login POST) + Set-Cookie.
+    // Do not redirect — that would drop the cookie on Safari and the POST body.
+    const response = NextResponse.next();
     response.cookies.set(
       decision.grant === "admin" ? ADMIN_ACCESS_COOKIE : PORTAL_ACCESS_COOKIE,
       secret ? await accessCookieValue(secret) : "",

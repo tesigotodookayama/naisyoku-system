@@ -1,9 +1,10 @@
+import { loginApiAction } from "@/lib/accessGate";
 import PortalLoginForm from "./LoginForm";
 
 export default async function PortalLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; key?: string }>;
 }) {
   const sp = await searchParams;
 
@@ -17,7 +18,7 @@ export default async function PortalLoginPage({
         </div>
 
         <div className="rounded-2xl p-6 sm:p-8 bg-white shadow-2xl">
-          <PortalLoginForm initialError={sp.error} />
+          <PortalLoginForm initialError={sp.error} action={loginApiAction("portal", sp.key)} />
         </div>
       </div>
     </div>

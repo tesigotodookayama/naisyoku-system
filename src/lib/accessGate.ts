@@ -40,11 +40,23 @@ export function isSharedDataPath(pathname: string): boolean {
   return pathname === "/api/db" || pathname.startsWith("/api/db/");
 }
 
-/** Only these pages accept ?key= and set the long-lived cookie. */
+/**
+ * Login pages and their POST APIs accept ?key= and set the long-lived cookie.
+ * The API paths must be included so iPhone Safari can POST with ?key= before
+ * the access cookie exists (ITP often drops Set-Cookie on 302/307).
+ */
 export function entryArea(pathname: string): AccessArea | null {
-  if (pathname === "/admin/login") return "admin";
-  if (pathname === "/portal/login") return "portal";
+  if (pathname === "/admin/login" || pathname === "/api/admin/login") return "admin";
+  if (pathname === "/portal/login" || pathname === "/api/portal/login") return "portal";
   return null;
+}
+
+/** Native form action. Include ?key= so the POST is granted even without a cookie. */
+export function loginApiAction(area: AccessArea, key?: string | null): string {
+  const path = area === "admin" ? "/api/admin/login" : "/api/portal/login";
+  const value = key?.trim() ?? "";
+  if (!value) return path;
+  return `${path}?key=${encodeURIComponent(value)}`;
 }
 
 export function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
